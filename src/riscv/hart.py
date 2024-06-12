@@ -1,0 +1,362 @@
+"""
+Describe purpose of this script here
+
+Created: 6/12/24
+"""
+from enum import Enum
+from typing import Iterable
+
+
+def main():
+    pass
+
+
+if __name__ == "__main__":
+    main()
+
+
+def bitmask(bit1,bit0):
+    """
+    Make a bitmask.
+    :param bit1: Highest bit to be set to 1. Note that this is
+                 inclusive, unlike most other places like this
+                 in Python.
+    :param bit0: Lowest bit to be set to 1
+    :return: Integer with all bits between bit0 and bit1 set to 1
+
+    example:
+       print("%b"%bitmask(6,0))
+         1111111
+       print("%b"%bitmask(11,7))
+         0000111110000000
+
+    """
+    maskwidth=(bit1-bit0+1)
+    return ((1<<maskwidth)-1)<<bit0
+
+
+def read_bitfield(x, bit1, bit0):
+    """
+    Parse a bitfield out of a larger number
+    :param bit1: Highest bit to be set to 1. Note that this is
+                 inclusive, unlike most other places like this
+                 in Python.
+    :param bit0: Lowest bit to be set to 1
+    :return: bits in the bit field, shifted right so that the
+            least significant bit of the field falls on 0
+    """
+    return (x & bitmask(bit1,bit0))>>bit0
+
+
+def sign_extend(val, sign_bit, new_width):
+    """
+    Sign extend a number of a given bit-length
+    :param val: value to extend
+    :param sign_bit: bit position of sign bit
+    :param new_width: width of new number in bits
+    :return: *positive* number with the sign bit repeated as many times as necessary to fill out the rest of the number
+
+    This is a bit weird because of how Python handles ints as having
+    an unlimited bit length.
+    """
+    if read_bitfield(val, sign_bit, sign_bit) == 1:
+        result=val
+        for bit_pos in range(sign_bit+1,new_width):
+            result|=1<<bit_pos
+        return result
+    else:
+        return val
+
+
+def signed(val,bit):
+    """
+    Interpret a twos-complement number of given length as a Python signed integer
+    :param val:
+    :param bit: position of the sign bit, so for instance will be 11 to interpret a 12-bit signed number
+    :return:
+    """
+    if read_bitfield(val,bit,bit)==1:
+        min_negative=1<<bit
+        negative_value=min_negative-read_bitfield(val,bit-1,0)
+        return -negative_value
+    return val
+
+
+def read_bitfields(ins:int,fields:Iterable[tuple[int,int,int]],XLEN:int=None,is_signed:bool=None):
+    result=0
+    signbit=0
+    for b1,b0,shift in fields:
+        result|=read_bitfield(ins,b1,b0)<<shift
+        this_signbit=shift+(b1-b0)
+        if this_signbit>signbit:
+            signbit=this_signbit
+    if XLEN is not None:
+        result=sign_extend(result,signbit,XLEN)
+        if is_signed:
+            result=signed(result,signbit)
+    return result
+
+
+class Opcode(Enum):
+    LOAD     =0b00000
+    LOAD_FP  =0b00001
+    custom0  =0b00010
+    MISC_MEM =0b00011
+    OP_IMM   =0b00100
+    AUIPC    =0b00101
+    OP_IMM_32=0b00110
+    b48      =0b00111
+
+    STORE    =0b01000
+    STORE_FP =0b01001
+    custom1  =0b01010
+    AMO      =0b01011
+    OP       =0b01100
+    LUI      =0b01101
+    OP_32    =0b01110
+    b64      =0b01111
+
+    MADD     =0b10000
+    MSUB     =0b10001
+    NMSUB    =0b10010
+    NMADD    =0b10011
+    OP_FP    =0b10100
+    reserved0=0b10101
+    custom2  =0b10110
+    b48_     =0b10111
+
+    BRANCH   =0b11000
+    JALR     =0b11001
+    reserved1=0b11010
+    JAL      =0b11011
+    SYSTEM   =0b11100
+    reserved2=0b11101
+    custom3  =0b11110
+    b80      =0b11111
+
+
+class Instruction:
+    nameidx=1
+    abi_regnames=[
+        # ABI            longer ABI  Use by convention                         Preserved?    Register
+        ("zero"        , "zero"     , "hardwired to 0, ignores writes"        , None       ), #x0
+        ("ra"          , "retaddr"  , "return address for jumps"              , False      ), #x1
+        ("sp"          , "stackptr" , "stack pointer"                         , True       ), #x2
+        ("gp"          , "globalptr", "global pointer"                        , None       ), #x3
+        ("tp"          , "threadptr", "thread pointer"                        , None       ), #x4
+        ("t0"          , "temp0"    , "temporary register 0"                  , False      ), #x5
+        ("t1"          , "temp1"    , "temporary register 1"                  , False      ), #x6
+        ("t2"          , "temp2"    , "temporary register 2"                  , False      ), #x7
+        ("fp"          , "frameptr" , "saved register 0 _or_ frame pointer"   , True       ), #x8
+        ("s1"          , "saved0"   , "saved register 1"                      , True       ), #x9
+        ("a0"          , "arg0"     , "return value _or_ function argument 0" , False      ), #x10
+        ("a1"          , "arg1"     , "return value _or_ function argument 1" , False      ), #x11
+        ("a2"          , "arg2"     , "function argument 2"                   , False      ), #x12
+        ("a3"          , "arg3"     , "function argument 3"                   , False      ), #x13
+        ("a4"          , "arg4"     , "function argument 4"                   , False      ), #x14
+        ("a5"          , "arg5"     , "function argument 5"                   , False      ), #x15
+        ("a6"          , "arg6"     , "function argument 6"                   , False      ), #x16
+        ("a7"          , "arg7"     , "function argument 7"                   , False      ), #x17
+        ("s2"          , "saved2"   , "saved register 2"                      , True       ), #x18
+        ("s3"          , "saved3"   , "saved register 3"                      , True       ), #x19
+        ("s4"          , "saved4"   , "saved register 4"                      , True       ), #x20
+        ("s5"          , "saved5"   , "saved register 5"                      , True       ), #x21
+        ("s6"          , "saved6"   , "saved register 6"                      , True       ), #x22
+        ("s7"          , "saved7"   , "saved register 7"                      , True       ), #x23
+        ("s8"          , "saved8"   , "saved register 8"                      , True       ), #x24
+        ("s9"          , "saved9"   , "saved register 9"                      , True       ), #x25
+        ("s10"         , "saved10"  , "saved register 10"                     , True       ), #x26
+        ("s11"         , "saved11"  , "saved register 11"                     , True       ), #x27
+        ("t3"          , "temp3"    , "temporary register 3"                  , False      ), #x28
+        ("t4"          , "temp4"    , "temporary register 4"                  , False      ), #x29
+        ("t5"          , "temp5"    , "temporary register 5"                  , False      ), #x30
+        ("t6"          , "temp6"    , "temporary register 6"                  , False      ), #x31
+        ("pc"          , "program counter"                       , None       ), #pc
+]
+
+
+class Hart:
+    """
+    Represent a (Har)dware (t)hread.
+    """
+    def __init__(self,exts:Iterable['InstructionSet'],mem=None,XLEN=32,breakpoints:set=None):
+        self.exts=exts
+        if mem is None:
+            mem=Memory()
+        if breakpoints is None:
+            breakpoints=set()
+        self.breakpoints=breakpoints
+        self.XLEN=XLEN
+        self.mem=mem
+        self._pc=0
+        self._pc_changed=False
+        self.x=Regfile(XLEN=XLEN)
+        self.ext={}
+        for ext in self.exts:
+            ext.add_state(self)
+    def sign_extend(self,v,bit):
+        return sign_extend(v, bit, self.XLEN)
+    def signed(self,v):
+        return signed(v, self.XLEN - 1)
+    def set_pc(self,v):
+        self._pc= read_bitfield(v, self.XLEN - 1, 0)
+        self._pc_changed=True
+    def get_pc(self):
+        return self._pc
+    def dump(self):
+        for i,x in enumerate(self.x._x):
+            print(f"x%02d:0x%0{self.XLEN//4}x   "%(i,x),end='')
+            if i%8==7:
+                print()
+    pc=property(get_pc,set_pc)
+    def fetch(self):
+        """
+        Fetch one instruction. We can tell how many bytes long the instruction is
+        purely from the first few bits of the instruction, as shown in figure 1.1
+        :return: tuple of length of instruction and unsigned int with the entire
+                 instruction. This is Python, so we get an int with an unlimited
+                 bit-length, enough for any instruction.
+        """
+        # Read the first 16-bit parcel of the instruction, and figure out length from it
+        parcel=self.mem.load(2,self.pc)
+        if aa:=read_bitfield(parcel,1,0)!=0b11:
+            # Compressed instruction, 16 bits only
+            return 2,parcel
+        elif bbb:=read_bitfield(parcel,4,2)!=0b111:
+            # 32-bit instruction
+            return 4,self.mem.load(4,self.pc)
+        else:
+            # There is a proposal for instructions longer than 32-bits,
+            # but it is not considered frozen and no instructions use it.
+            raise ValueError("Instruction is longer than 32-bits, spec is not frozen")
+    def exec_one(self):
+        length,ins=self.fetch()
+        handled=False
+        self._pc_changed=False
+        if self.pc in self.breakpoints:
+            print(f"Breakpoint at pc=0x{self.pc:08x}")
+        for i,ext in enumerate(self.exts):
+            if ext.interpret(self,ins):
+                handled=True
+                break
+        if not handled:
+            from riscv.rv32i import I
+            raise ValueError(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")
+        else:
+            if not self._pc_changed:
+                self.pc += length
+
+
+class StateUpdate:
+    def __init__(self):
+        self.dx={}
+        self.dm={}
+    def commit(self,hart:Hart):
+        for (i,val) in self.dx.items():
+            hart.x[i]=val
+
+
+class InstructionSet:
+    def add_state(self,hart:Hart):
+        pass
+    def interpret(self,hart:Hart,ins:int)->bool:
+        return False
+
+
+class Regfile:
+    # Register length --- the difference between RV32I and RV64I
+    def __init__(self,XLEN=32):
+        self._x=[0]*32
+        self.XLEN=XLEN
+    def __getitem__(self,r):
+        if r==0:
+            return 0
+        return self._x[r]
+    def __setitem__(self,r,v):
+        if r==0:
+            return
+        #todo - Be careful about signed/unsigned, twos complement, sign extension, etc.
+        self._x[r]= v & bitmask(self.XLEN - 1, 0)
+
+
+class Memory(dict):
+    def __missing__(self,k):
+        return 0
+    def load(self,width,baseaddr):
+        """
+        Loads a little-endian value of arbitrary width from the memory
+        :param baseaddr:
+        :param width:
+        :return:
+        """
+        result=0
+        for ofs in range(width):
+            try:
+                b=self[baseaddr+ofs]
+            except KeyError:
+                b=0
+            result |= b<<(ofs*8)
+        return result
+    def store(self,width,baseaddr,value):
+        """
+        Stores a little-endian value of arbitrary width from the memory
+        :param baseaddr:
+        :param width:
+        :return:
+        """
+        for ofs in range(width):
+            self[baseaddr+ofs]= read_bitfield(value, ofs * 8 + 7, ofs * 8)
+    def stuff(self,hexfn:str):
+        """
+        Load an Intel Hex file into memory
+
+        :param hexfn: Name of file to load
+        :return:
+        """
+        hiaddr=0
+        with open(hexfn,"rt") as hexf:
+            for line in hexf:
+                line=line.strip()
+                bytecount=int(line[1:3],16)
+                loaddr=int(line[3:7],16)
+                rtype=int(line[7:9],16)
+                stored_cksum=int(line[bytecount*2+9:bytecount*2+9+2],16)
+                if rtype==0:
+                    data = bytes([int(line[i * 2 + 9:i * 2 + 9 + 2], 16) for i in range(bytecount)])
+                    # Data, stuff into memory at given addr
+                    for i,b in enumerate(data):
+                        addr=loaddr+hiaddr*0x10000+i
+                        self[addr]=b
+                elif rtype==1:
+                    # End of file record
+                    break
+                elif rtype==4:
+                    # Extended linear address (upper 16 bits of 32-bit address)
+                    hiaddr=int(line[9:13],16)
+    def dump(self,addr0,addr1):
+        for i in range(0,addr1-addr0,16):
+            print(f"{addr0+i:08x}  ",end='')
+            for j in range(16):
+                if addr0+i+j in self:
+                    val=f"{self[addr0+i+j]:02x}"
+                else:
+                    val="xx"
+                if addr0+i+j<addr1:
+                    print(val,end='')
+                else:
+                    print('  ',end='')
+                if j%4==3:
+                    print(" ",end='')
+            print(" ",end='')
+            for j in range(16):
+                if addr0+i+j<addr1:
+                    if addr0 + i + j not in self:
+                        val = '_'
+                    elif self[addr0+i+j]>=32 and self[addr0+i+j]<=127:
+                        val=chr(self[addr0+i+j])
+                    else:
+                        val='.'
+                    print(val, end='')
+                else:
+                    print(' ',end='')
+            print()

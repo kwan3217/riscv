@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# GCC compiled objects
+*.o
+
+# Disassemblies for compiled objects
+*.o.map
+
+# Disassemblies for compiled image
+*.lss
+
