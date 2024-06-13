@@ -135,7 +135,29 @@ class Opcode(Enum):
     b80      =0b11111
 
 
-class Instruction:
+class WrongInterpreter(ValueError):
+    pass
+
+
+class InstructionInterpreter:
+    """
+    This class represents code which interprets an instruction.
+    """
+    def execute(self, ins:int, hart: 'Hart')->None:
+        """
+        Execute an instruction by computing how it changes a hart's state
+        and then making that change to the given hart.
+
+        :param ins: Coded instruction, in a single (unsigned) integer.
+        :param hart: Hart to affect
+        :raises: ValueError if the passed instruction isn't really handled
+                 by this handler. Sometimes a table-driven instruction decoder
+                 can't distinguish between two interpreters bases solely on
+                 the bitfields it is looking at. In this case, it should
+                 try one that matches, and if it raises a ValueError, then
+                 it should go on to the next one etc.
+        """
+        raise NotImplementedError()
     nameidx=1
     abi_regnames=[
         # ABI            longer ABI  Use by convention                         Preserved?    Register
@@ -236,9 +258,12 @@ class Hart:
         if self.pc in self.breakpoints:
             print(f"Breakpoint at pc=0x{self.pc:08x}")
         for i,ext in enumerate(self.exts):
-            if ext.interpret(self,ins):
+            try:
+                ext.interpret(self,ins)
                 handled=True
                 break
+            except WrongInterpreter:
+                continue
         if not handled:
             from riscv.rv32i import I
             raise ValueError(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")

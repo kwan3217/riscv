@@ -6,7 +6,7 @@ Created: 6/11/24
 from dataclasses import dataclass
 from typing import Callable
 
-from riscv.hart import read_bitfield, signed, read_bitfields, InstructionSet, Hart, Instruction, bitmask, Opcode
+from riscv.hart import read_bitfield, read_bitfields, InstructionSet, Hart, InstructionInterpreter, WrongInterpreter
 from riscv.rv32i import ParsedInstruction, I
 
 
@@ -112,19 +112,18 @@ class Zicsr(InstructionSet):
     def interpret(self, hart: Hart, ins: int)->bool:
         p=decode(ins)
         if p.opcode!=0b1110011:
-            return False # Not a system instruction
+            raise WrongInterpreter("Not a system instruction")
         ins_type = self.ins_exec[p.funct3]
         if ins_type is None:
-            return False
-        elif not isinstance(ins_type,Instruction):
+            raise WrongInterpreter("Instruction not in Zicsr table")
+        elif not isinstance(ins_type, InstructionInterpreter):
             if p.imm not in ins_type:
-                return False
+                raise WrongInterpreter()
             ins_type=ins_type[p.imm]
         print(f"{hart.pc:08x} -- {ins:08x}  {ins_type.disasm(ins,hart.XLEN)}  # {ins_type.formula(ins,hart.XLEN)}")
         ins_type.execute(ins, hart)
-        return True
     ins_exec = [None for func3 in range(8)]
-    class xRET(Instruction):
+    class xRET(InstructionInterpreter):
         """
         Return to a different privilege level. For now we just
         copy the correct CSR (determined by which privilege level
@@ -138,7 +137,6 @@ class Zicsr(InstructionSet):
             hart.pc=hart.csr[self.csr]
         def disasm(self, ins: int, XLEN: int):
             return f"{self.name:7s}"
-
         def formula(self, ins: int, XLEN: int):
             name=f"0x{self.csr:03x}"
             if self.csr in csrnames:
@@ -147,7 +145,7 @@ class Zicsr(InstructionSet):
     ins_exec[0b000]={}
     ins_exec[0b000][0b0011000_00010]=xRET("MRET",0x341)
 
-    class CSRR(Instruction):
+    class CSRR(InstructionInterpreter):
         """
         CSR Read and Set -- perform the following two operations
         simultaneously and atomically:
@@ -196,7 +194,7 @@ class Zicsr(InstructionSet):
                 return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}]"
             else:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}],CSR[{name}]{self.symbol}{self.abi_regnames[p.rs1][self.nameidx]}"
-    class CSRI(Instruction):
+    class CSRI(InstructionInterpreter):
         """
         CSR Read and Set Immediate -- Same as above, but use an immediate value instead of
           a register as the source.
@@ -237,7 +235,6 @@ class Zicsr(InstructionSet):
                 return f"CSR[{name}]{self.symbol}{p.rs1}"
             else:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}],CSR[{name}]{self.symbol}{p.rs1}"
-
     ins_exec[0b001]=CSRR("CSRRW","=",lambda csr,rs1:rs1)
     ins_exec[0b010]=CSRR("CSRRS","|=",lambda csr,rs1:csr|rs1)
     ins_exec[0b011]=CSRR("CSRRC","&=~",lambda csr,rs1:csr&~rs1)

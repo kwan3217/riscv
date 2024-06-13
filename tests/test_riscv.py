@@ -103,7 +103,6 @@ class CheckSigMem(Memory):
      "LHU",
      "LUI",
      "LW",
-     "LW",
      "OR",
      "ORI",
      "SB",
