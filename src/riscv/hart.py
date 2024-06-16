@@ -346,8 +346,12 @@ class Hart:
             except WrongInterpreter:
                 continue
         if not handled:
-            from riscv.rv32i import I
-            raise ValueError(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")
+            if read_bitfield(ins,1,0)==0b11:
+                from riscv.rv32i import I
+                raise ValueError(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")
+            else:
+                raise ValueError(f"At pc=0x{self.pc:08x}, unhandled compressed instruction "
+                                 f"0b{read_bitfield(ins,15,13):03b}_{read_bitfield(ins,12,12):01b}_{read_bitfield(ins,11,7):05b}_{read_bitfield(ins,6,2):05b}_{read_bitfield(ins,1,0):02b}")
         else:
             if not self._pc_changed:
                 self.pc += length
