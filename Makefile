@@ -1,20 +1,22 @@
-all: example
-ARCH=rv32i
+all: example.hex
+ARCH=rv32ic
+ABI=ilp32
 OPT=-Og
+PREFIX=riscv32-unknown-elf
 
 example.hex: example
-	riscv-none-embed-objcopy -O ihex $< $@
+	$(PREFIX)-objcopy -O ihex $< $@
 
 example: example.o
-	riscv-none-embed-gcc $(OPT) --static -march=$(ARCH) -o $@ $< -T rv32i.ld
-	riscv-none-embed-objdump -xS $@ > $@.lss
-	riscv-none-embed-strip $@
-	riscv-none-embed-objdump -xS $@ > $@.strip.lss
+	$(PREFIX)-gcc $(OPT) --static -march=$(ARCH) -mabi=$(ABI) -o $@ $< -T rv32i.ld
+	$(PREFIX)-objdump -xS $@ > $@.lss
+	$(PREFIX)-strip $@
+	$(PREFIX)-objdump -xS $@ > $@.strip.lss
 
 
 %.o: %.c
-	riscv-none-embed-gcc $(OPT) -g -c -march=$(ARCH) -o $@ $<
-	riscv-none-embed-objdump -xS $@ > $@.map
+	$(PREFIX)-gcc $(OPT) -g -c -march=$(ARCH) -mabi=$(ABI) -o $@ $<
+	$(PREFIX)-objdump -xS $@ > $@.map
 
 
 clean:
