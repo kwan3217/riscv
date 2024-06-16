@@ -3,7 +3,9 @@ Describe purpose of this script here
 
 Created: 6/12/24
 """
+import io
 from enum import Enum
+from subprocess import run
 from typing import Iterable
 
 
@@ -407,7 +409,7 @@ class Memory(dict):
         """
         for ofs in range(width):
             self[baseaddr+ofs]= read_bitfield(value, ofs * 8 + 7, ofs * 8)
-    def stuff(self,hexfn:str):
+    def stuff_hex(self, hexfn:str=None, hexf: io.TextIOBase =None):
         """
         Load an Intel Hex file into memory
 
@@ -415,7 +417,12 @@ class Memory(dict):
         :return:
         """
         hiaddr=0
-        with open(hexfn,"rt") as hexf:
+        if hexf is None:
+            hexf=open(hexfn,"rt")
+            needs_close=True
+        else:
+            needs_close=False
+        try:
             for line in hexf:
                 line=line.strip()
                 bytecount=int(line[1:3],16)
@@ -434,6 +441,23 @@ class Memory(dict):
                 elif rtype==4:
                     # Extended linear address (upper 16 bits of 32-bit address)
                     hiaddr=int(line[9:13],16)
+        finally:
+            if needs_close:
+                hexf.close()
+    def stuff_elf(self,elffn:str)->dict[str,int]:
+        """
+        Load an ELF image into memory
+
+        :param elffn:
+        :return: dict of symbols. Key is string name of symbol, val is parsed address
+        """
+        result = run(
+            f"riscv64-unknown-elf-objcopy -O ihex {elffn} /dev/stdout",
+            capture_output=True, shell=True)
+        if len(result.stderr)!=0:
+            raise RuntimeError(result.stderr)
+        with io.TextIOWrapper(io.BytesIO(result.stdout)) as hexf:
+            self.stuff_hex(hexf=hexf)
     def dump(self,addr0,addr1):
         for i in range(0,addr1-addr0,16):
             print(f"{addr0+i:08x}  ",end='')
