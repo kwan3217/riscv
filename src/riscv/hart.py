@@ -212,6 +212,28 @@ class InstructionInterpreter:
                  it should go on to the next one etc.
         """
         raise NotImplementedError()
+    def disasm(self, ins: int, XLEN: int)->str:
+        """
+        Disassemble an instruction into one assembly-language statement
+
+        :param ins: Coded instruction, in a single (unsigned) integer
+        :param XLEN: bit length to sign-extend immediates to
+        :return: One line of assembly language. Intended to be compatible
+                 with the GCC assembler.
+        """
+        raise NotImplementedError()
+    def formula(self, ins: int, XLEN: int):
+        """
+        Disassemble an instruction into a line of C-like code. This is
+        easier for a human to interpret since we don't have to remember
+        what each mnemonic means or the order of the operands.
+
+        :param ins: Coded instruction, in a single (unsigned) integer
+        :param XLEN: bit length to sign-extend immediates to
+        :return: One line of C-like pseudocode. Intended for human
+                 intepretation, so not required to be machine-readable.
+        """
+        raise NotImplementedError()
     nameidx=1
     abi_regnames=[
         # ABI            longer ABI  Use by convention                         Preserved?    Register
