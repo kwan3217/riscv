@@ -279,13 +279,14 @@ class Hart:
     """
     Represent a (Har)dware (t)hread.
     """
-    def __init__(self,exts:Iterable['InstructionSet'],mem=None,XLEN=32,breakpoints:set=None):
+    def __init__(self,exts:Iterable['InstructionSet'],mem=None,XLEN=32,breakpoints:set=None,halts:set=None):
         self.exts=exts
         if mem is None:
             mem=Memory()
         if breakpoints is None:
             breakpoints=set()
         self.breakpoints=breakpoints
+        self.halts=halts
         self.XLEN=XLEN
         self.mem=mem
         self._pc=0
@@ -335,6 +336,8 @@ class Hart:
         self._pc_changed=False
         if self.pc in self.breakpoints:
             print(f"Breakpoint at pc=0x{self.pc:08x}")
+        if self.pc in self.halts:
+            raise StopIteration(f"Hit halt at pc=0x{self.pc:08x}")
         for i,ext in enumerate(self.exts):
             try:
                 ext.interpret(self,ins)
