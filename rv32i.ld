@@ -7,7 +7,6 @@
 OUTPUT_FORMAT("elf32-littleriscv", "elf32-littleriscv", "elf32-littleriscv")
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
-SEARCH_DIR("=/Host/home/ilg/Work/riscv-none-gcc-8.2.0-2.2/linux-x64/install/riscv-none-gcc/riscv-none-embed/lib");
 SEARCH_DIR("=/usr/local/lib");
 SEARCH_DIR("=/lib");
 SEARCH_DIR("=/usr/lib");
@@ -122,7 +121,7 @@ is in between read-only data and initialized data. */
     /* .bss section which is used for uninitialized (zeroed) data */
     .bss (NOLOAD) :
     {
-        bss_start = . ;
+        __bss_start = . ;
         *(.bss .bss.*)           /* all zeroed sections */
         *(.gnu.linkonce.b*)
         *(COMMON)
