@@ -92,10 +92,8 @@ def sign_extend(val, sign_bit, new_width):
                 value is encoded.
     :param sign_bit: bit position of sign bit
     :param new_width: width of new number in bits
-    :return: *positive* number with the sign bit repeated as many times as necessary to fill out the rest of the number
-
-    This is a bit weird because of how Python handles ints as having
-    an unlimited bit length.
+    :return: *positive* number with the sign bit repeated as many
+             times as necessary to fill out the rest of the number
     """
     if read_bitfield(val, sign_bit, sign_bit) == 1:
         result=val
@@ -306,8 +304,8 @@ class Hart:
         return self._pc
     def dump(self):
         for i,x in enumerate(self.x._x):
-            print(f"x%02d:0x%0{self.XLEN//4}x   "%(i,x),end='')
-            if i%8==7:
+            print(f"x%02d({InstructionInterpreter.abi_regnames[i][0]:4s}):0x%0{self.XLEN//4}x   "%(i,x),end='')
+            if i%4==3:
                 print()
     pc=property(get_pc,set_pc)
     def fetch(self):
