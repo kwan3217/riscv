@@ -222,7 +222,7 @@ class RV32I(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = S(ins, XLEN, True)
             size = 1 << read_bitfield(p.funct3, 1, 0)
-            cast = [None, "i8", "i16", None, "i32"]
+            cast = [None, "b8", "b16", None, "b32"]
             return f"mem[{self.abi_regnames[p.rs1][0]}{'+' if p.imm >= 0 else ''}{p.imm}]={cast[size]}({self.abi_regnames[p.rs2][0]})"
     class Branch(InstructionInterpreter):
         def __init__(self, name: str, symbol: str, condition: Callable[[int, int], bool]):
