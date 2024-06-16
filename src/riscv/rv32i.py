@@ -186,6 +186,8 @@ class RV32I(InstructionSet):
             size = 1 << read_bitfield(p.funct3, 1, 0)
             if size > 4:
                 raise WrongInterpreter(f"Unsupported size {size}")
+            if size==4 and unsigned:
+                raise WrongInterpreter(f"Unsigned 32-bit load not supported in RV32I -- should be handled by RV64I")
             addr = hart.x[p.rs1]  # base
             addr += signed(p.imm, 12)
             val = hart.mem.load(size, addr)
