@@ -161,10 +161,11 @@ class RV32I(InstructionSet):
     class JALR(InstructionInterpreter):
         def execute(self, ins: int, hart: Hart) -> None:
             p = I(ins, hart.XLEN, True)
-            hart.x[p.rd] = hart.pc
             target = hart.x[p.rs1]
             target += signed(p.imm, 12)
             target &= bitmask(31, 1)
+            retaddr=hart.pc+4
+            hart.x[p.rd] = retaddr
             hart.pc = target
         def disasm(self, ins: int, XLEN: int):
             p = I(ins, XLEN, True)
