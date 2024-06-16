@@ -48,10 +48,46 @@ def read_bitfield(x, bit1, bit0):
     return (x & bitmask(bit1,bit0))>>bit0
 
 
+# Signed numbers
+# Python's native int format is a signed number of effectively unlimited bits. This
+# is in contrast to hardware ints, which are always a fixed number of bits. The bits
+# have an implied encoding, either unsigned or twos-complement signed, depending
+# on context. Unsigned values are the natural choice for bitfields and for values
+# which are known to be positive. If negative values are in range, twos-complement
+# encoding enables the same addition hardware to be used without caring whether the
+# inputs are signed or unsigned.
+#
+# We therefore have two related but independent concepts:
+# * Sign extension: To encode a twos-complement number of a given shorter bit length
+#   as a number with a longer bit-length, use the MSb of the shorter number to fill
+#   in the longer number. For instance, -2 is encoded in 4 bits as 0b1110, since
+#   0b1110+0b0010=0b1_0000 and since the carry-out bit is dropped, we end up with
+#   0b0000 as expected for -2+2=0. To sign-extend this value to a higher bit length,
+#   we put the old number in the lower bits of a new value, then duplicate the highest
+#   bit of the old number in all the higher bits. So for example, to sign-extend a
+#   4-bit value encoding -2 to 8 bits, we initially have the number 0bxxxx_1110, where
+#   the lower bits are from the original value, and the new bits are undetermined as
+#   yet. The highest bit of -2=0b1110 is 0b1, so the new bits are *all* 0b1 and we end
+#   up with 0b1111_1110. If the original was encoding a positive number such as
+#   +2=0b0010, its highest bit would be 0 and the 8-bit equivalent would be
+#   0b0000_0010.
+# * Sign interpretation:
+#   In Python, there is no such thing as a highest bit. Any twos-complement encoding
+#   *can* be represented as a positive integer, including the encoding of negative
+#   numbers. In order for an encoded value to be "imported" to Python so that its
+#   normal arithmetic operations can be used, the twos-complement values must be
+#   interpreted. In order to do this, we need to know where the sign bit is. For
+#   hardware ints, this is always the MSb, but for Python we need to know which
+#   bit is intended to be the MSb. To do sign interpretation, we then do a
+#   twos-complement *decoding* and if the sign bit in the bitfield was lit, we
+#   return a native Python number which is negative and matches the encoded
+#   negative number.
 def sign_extend(val, sign_bit, new_width):
     """
     Sign extend a number of a given bit-length
-    :param val: value to extend
+    :param val: twos-complement value to extend. This will be a
+                *positive* number in Python even when a negative
+                value is encoded.
     :param sign_bit: bit position of sign bit
     :param new_width: width of new number in bits
     :return: *positive* number with the sign bit repeated as many times as necessary to fill out the rest of the number
@@ -71,9 +107,13 @@ def sign_extend(val, sign_bit, new_width):
 def signed(val,bit):
     """
     Interpret a twos-complement number of given length as a Python signed integer
-    :param val:
-    :param bit: position of the sign bit, so for instance will be 11 to interpret a 12-bit signed number
-    :return:
+    :param val: *positive* Python integer carrying the twos-complement
+                encoding of a value
+    :param bit: position of the sign bit, so for instance will be 11 to
+                interpret a 12-bit signed number
+    :return: Python integer of correct sign, IE the twos-complement encoding
+             of a negative number (which is positive) will be interpreted as
+             a negative number.
     """
     if read_bitfield(val,bit,bit)==1:
         min_negative=1<<bit
