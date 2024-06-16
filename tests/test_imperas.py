@@ -96,7 +96,7 @@ class CheckSigMem(Memory):
      "XORI"
      ]
 )
-def test_imperas(testname:str,max_cycles:int=100000):
+def test_imperas_rv32i(testname:str,max_cycles:int=100000):
     """
     Execute the Imperas test cases
 
@@ -116,6 +116,24 @@ def test_imperas(testname:str,max_cycles:int=100000):
     The tests run by using an instrumented memory -- the memory loads the reference
     signature, then checks each time that the emulated program writes to the
     signature block and verifies that the block is the same as the signature.
+
+    Unfortunately, the Imperas test cases only cover RV32I -- there is a directory
+    structure which promises much more and then fails to deliver :( . The other
+    cases are missing assembly source code, signatures, or both.
+
+    To compile the tests that *are* there, do this:
+
+    ```
+    cd imperas-riscv-tests
+    make RISCV_TARGET=riscvOVPsim RISCV_PREFIX=riscv-none-embed- clean
+    make RISCV_TARGET=riscvOVPsim RISCV_PREFIX=riscv-none-embed-
+    for i in *.elf
+    do
+      riscv-none-embed-objdump -xS $i > `basename $i .elf`.objdump
+      riscv-none-embed-objcopy -O ihex $i `basename $i .elf`.hex;
+    done
+    ```
+
     :param testname:
     :param max_cycles:
     :return:
@@ -129,7 +147,7 @@ def test_imperas(testname:str,max_cycles:int=100000):
     hart = Hart((RV32I(), Zicsr()), mem=CheckSigMem(
         f"imperas-riscv-tests/riscv-test-suite/rv32i_m/I/references/{testname}-01.reference_output", sigstart),
                 breakpoints={0x8000_0198})
-    hart.mem.stuff(f"imperas-riscv-tests/work/rv32i_m/I/{testname}-01.hex")
+    hart.mem.stuff_hex(f"imperas-riscv-tests/work/rv32i_m/I/{testname}-01.hex")
     hart.pc = 0x8000_0000
     cycles=0
     while cycles<max_cycles:
