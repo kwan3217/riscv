@@ -122,7 +122,20 @@ def signed(val,bit):
     return val
 
 
-def read_bitfields(ins:int,fields:Iterable[tuple[int,int,int]],XLEN:int=None,is_signed:bool=None):
+def read_bitfields(ins:int,fields:Iterable[tuple[int,int,int]],XLEN:int=None,is_signed:bool=False):
+    """
+    Read a value from multiple separate fields of a number
+
+    :param ins: Instruction or other bitfield value
+    :param fields: List of tuples, one for each field to extract. The tuple consists of (b1,b0,shift):
+      * b1 is the MSb in the original bitfield
+      * b0 is the LSb in the original bitfield
+      * shift is the LSb in the final value, IE b0 of where this field will land.
+    :param XLEN: If passed, sign-extend the number to this many bits.
+    :param is_signed: If True, interpret the number as signed
+    :return:
+
+    """
     result=0
     signbit=0
     for b1,b0,shift in fields:
@@ -132,8 +145,9 @@ def read_bitfields(ins:int,fields:Iterable[tuple[int,int,int]],XLEN:int=None,is_
             signbit=this_signbit
     if XLEN is not None:
         result=sign_extend(result,signbit,XLEN)
-        if is_signed:
-            result=signed(result,signbit)
+        signbit=XLEN-1
+    if is_signed:
+        result=signed(result,signbit)
     return result
 
 
