@@ -137,4 +137,12 @@ dmypy.json
 # Disassemblies for compiled image
 *.lss
 
+# Imperas test cases
 /imperas-riscv-tests/
+
+# Toolchains etc
+/riscv-gnu-toolchain*/
+/riscof*/
+/riscv-isa-sim*/
+/riscv-opcodes*/
+/sail-riscv*/
