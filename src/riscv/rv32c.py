@@ -70,8 +70,9 @@ Created: 6/12/24
 from dataclasses import dataclass
 from typing import Callable, Mapping, Iterable
 
-from riscv.hart import InstructionSet, Hart, read_bitfield, WrongInterpreter, InstructionInterpreter, Opcode, \
-    read_bitfields, signed, bitmask
+from riscv.hart import InstructionSet, Hart, WrongInterpreter, InstructionInterpreter, \
+    IllegalInstruction
+from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
 
 
 @dataclass
