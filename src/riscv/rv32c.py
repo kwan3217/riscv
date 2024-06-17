@@ -86,9 +86,6 @@ class ParsedInstruction:
     offset:int=None
     target:int=None
 
-def op(ins):
-    return read_bitfield(ins, 1, 0)
-
 
 def CR(ins:int)->ParsedInstruction:
     """
