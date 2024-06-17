@@ -178,15 +178,16 @@ def CA(ins:int)-> ParsedInstruction:
                              funct=read_bitfields(ins, ((15, 10,2),(6, 5,0))))
 
 
-def CB(ins:int)-> ParsedInstruction:
+def CB(ins:int,imm_fields:Iterable[tuple[int,int,int]],XLEN:int)-> ParsedInstruction:
     """
     Parse instruction as if it's a CB-type (Compressed Branch)
     :param ins: 16-bit number to parse as a RV32C CSS instruction
     :return: ParsedInstruction with the valid fields set, and the other fields None
     """
     return ParsedInstruction(op=read_bitfield(ins, 1, 0),
-                             offset=read_bitfields(ins, ((12, 10,5),(6, 2,0))),
+                             imm=read_bitfields(ins, imm_fields,XLEN=XLEN),
                              rs1=read_bitfield(ins, 9, 7) + 8,
+                             rd =read_bitfield(ins, 9, 7) + 8,
                              funct=read_bitfield(ins, 15, 13))
 
 
@@ -221,6 +222,10 @@ class RV32C(InstructionSet):
                 if isinstance(ins_type,Mapping):
                     b12=read_bitfield(ins,12,12)
                     ins_type=ins_type[b12]
+                elif isinstance(ins_type,InstructionInterpreter):
+                    pass
+                else:
+                    ins_type=ins_type(ins)
         except KeyError:
             raise WrongInterpreter("Not found in RV32C instruction table")
         print(f"{hart.pc:08x} -- {ins:04x}      {ins_type.disasm(ins,hart.XLEN)}  # {ins_type.formula(ins,hart.XLEN)}")
@@ -257,6 +262,23 @@ class RV32C(InstructionSet):
                     return f"{self.abi_regnames[p.rd][self.nameidx]}+={p.imm}"
                 else:
                     return f"{self.abi_regnames[p.rd][self.nameidx]}-={-p.imm}"
+    class C_ANDI(InstructionInterpreter):
+        """
+        Execute C.ANDI, as well as C.NOP and C.HINT. The latter two
+        are implemented by adding immediate 0 to a particular register.
+        Since this is the right action for NOP, and since our emulator
+        doesn't care about performance and therefore ignores hints,
+        it is OK to interpret these as normal add-of-0.
+        """
+        def execute(self, ins: int, hart: 'Hart') -> None:
+            p=CB(ins,imm_fields=((12, 12,5),(6, 2,0)),XLEN=hart.XLEN)
+            hart.x[p.rd]=hart.x[p.rs1]&p.imm
+        def disasm(self, ins: int, XLEN: int) -> str:
+            p=CB(ins,imm_fields=((12, 12,5),(6, 2,0)),XLEN=XLEN)
+            return f"C.ANDI   x{p.rd:2d},0x{p.imm:08x}"
+        def formula(self, ins: int, XLEN: int):
+            p=CB(ins,imm_fields=((12, 12,5),(6, 2,0)),XLEN=XLEN)
+            return f"{self.abi_regnames[p.rd][self.nameidx]}&=0x{p.imm:08x}"
     class C_SWSP(InstructionInterpreter):
         """
         Execute C.SWSP
