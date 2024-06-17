@@ -227,14 +227,12 @@ class RV32I(InstructionSet):
             cast = [None, "b8", "b16", None, "b32"]
             return f"mem[{self.abi_regnames[p.rs1][0]}{'+' if p.imm >= 0 else ''}{p.imm}]={cast[size]}({self.abi_regnames[p.rs2][0]})"
     class Branch(InstructionInterpreter):
-        def __init__(self, name: str, symbol: str, condition: Callable[[int, int], bool]):
+        def __init__(self, name: str, symbol: str, condition: Callable[['Hart',int, int], bool]):
             self.name = name
             self.symbol = symbol
             self.condition = condition
         def execute(self, ins: int, hart: Hart) -> None:
             p = B(ins, hart.XLEN, True)
-            if p.imm == -20:
-                print(p.imm)
             if self.condition(hart, hart.x[p.rs1], hart.x[p.rs2]):
                 target = hart.pc
                 target += signed(p.imm, 12)
