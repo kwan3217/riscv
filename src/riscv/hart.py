@@ -114,7 +114,7 @@ class InstructionInterpreter:
         ("t1"          , "temp1"    , "temporary register 1"                  , False      ), #x6
         ("t2"          , "temp2"    , "temporary register 2"                  , False      ), #x7
         ("fp"          , "frameptr" , "saved register 0 _or_ frame pointer"   , True       ), #x8
-        ("s1"          , "saved0"   , "saved register 1"                      , True       ), #x9
+        ("s1"          , "saved1"   , "saved register 1"                      , True       ), #x9
         ("a0"          , "arg0"     , "return value _or_ function argument 0" , False      ), #x10
         ("a1"          , "arg1"     , "return value _or_ function argument 1" , False      ), #x11
         ("a2"          , "arg2"     , "function argument 2"                   , False      ), #x12
