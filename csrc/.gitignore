@@ -1,0 +1,12 @@
+# GCC compiled objects
+*.o
+*.bin
+*.hex
+*.elf
+
+# Disassemblies for compiled objects
+*.o.map
+
+# Disassemblies for compiled image
+*.lss
+

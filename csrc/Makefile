@@ -4,10 +4,10 @@ ABI=ilp32
 OPT=-Og
 PREFIX=riscv64-unknown-elf
 
-example.hex: example
+example.hex: example.elf
 	$(PREFIX)-objcopy -O ihex $< $@
 
-example: example.o
+example.elf: example.o
 	$(PREFIX)-gcc $(OPT) --static -march=$(ARCH) -mabi=$(ABI) -o $@ $< -T rv32i.ld
 	$(PREFIX)-objdump -xS $@ > $@.lss
 	$(PREFIX)-strip $@
@@ -21,7 +21,8 @@ example: example.o
 
 clean:
 	$(RM) example.o
-	$(RM) example
-	$(RM) example.lss
-	$(RM) example.o.map
+	$(RM) example.elf
+	$(RM) example*.lss
+	$(RM) example*.map
+	$(RM) example*.hex
 
