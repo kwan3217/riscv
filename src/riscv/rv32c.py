@@ -135,7 +135,7 @@ def CIW(ins:int)-> ParsedInstruction:
     """
     return ParsedInstruction(op=read_bitfield(ins, 1, 0),
                              rd=read_bitfield(ins, 4, 2) + 8,
-                             imm=read_bitfield(ins, 12, 5),
+                             imm=read_bitfields(ins, ((12,11,4),(10,7,6),(6,6,2),(5,5,3)),is_signed=False),
                              funct=read_bitfield(ins, 15, 13))
 
 
