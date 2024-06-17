@@ -33,7 +33,10 @@ encoded, and frequently there is *no* way to encode a particular
 instruction in 16-bit mode. In this case, the programmer (or
 compiler) just uses a normal 32-bit instruction. Every 16-bit
 instruction is the encoding of a 32-bit I instruction, so there
-is no additional "power" in the C instruction set.
+is no additional "power" in the C instruction set. For each instruction,
+the compiler or assembler decides whether the instruction *can* be
+encoded in 16 bits and does so, or *can't* be and is encoded in
+32 bits.
 
 In principle, only the instructions which are most common are encoded
 as 16-bit. In practice, this has to be decided (years) beforehand,
@@ -42,6 +45,26 @@ so the designers of RV32C made their best guesses as to what actually
 claim that something like 50% of instructions can be encoded in RV32C,
 saving 25% of the code memory usage.
 
+RV32C is *optional*. It is easier to design a core that doesn't implement
+it, becasue while (C) is for (C)ompressed, it might also be for
+(C)omplicated. Two things make it so:
+* In order to squeeze the largest number of instructions into the set,
+  we use complicated encodings. An encoding might be a register operation
+  except for if the register is x0. In this context the instruction
+  probably would be a no-op, but instead we steal the encoding to
+  do something completely different.
+* Compressed instructions with immediate values have those values'
+  bits scrambled, seemingly at random. The given reason is to put
+  the same bit value at the same encoding bit as often as possible,
+  to make hardware decoding easier (where it's just routing), but
+  it does make software decoding much more difficult.
+These two things put together make the instruction encoding much more
+complicated, and in some cases impossible to put into a single or
+nested Mapping, in contrast to RV32I which is very orthogonal and
+goes easily into a table. It seems like the coding is more amenable to
+such things as a decoding ROM (like the 6502) with its required high,
+required low, or don't care states for each bit in the encoding. It
+might be a good use case for Python structural match statement.
 Created: 6/12/24
 """
 from dataclasses import dataclass
