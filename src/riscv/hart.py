@@ -274,10 +274,10 @@ class Hart:
         """
         # Read the first 16-bit parcel of the instruction, and figure out length from it
         parcel=self.mem.load(2,self.pc)
-        if aa:=read_bitfield(parcel,1,0)!=0b11:
+        if aa:= read_bitfield(parcel, 1, 0) != 0b11:
             # Compressed instruction, 16 bits only
             return 2,parcel
-        elif bbb:=read_bitfield(parcel,4,2)!=0b111:
+        elif bbb:= read_bitfield(parcel, 4, 2) != 0b111:
             # 32-bit instruction
             return 4,self.mem.load(4,self.pc)
         else:
@@ -300,12 +300,12 @@ class Hart:
             except WrongInterpreter:
                 continue
         if not handled:
-            if read_bitfield(ins,1,0)==0b11:
+            if read_bitfield(ins, 1, 0)==0b11:
                 from riscv.rv32i import I
                 raise ValueError(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")
             else:
                 raise ValueError(f"At pc=0x{self.pc:08x}, unhandled compressed instruction "
-                                 f"0b{read_bitfield(ins,15,13):03b}_{read_bitfield(ins,12,12):01b}_{read_bitfield(ins,11,7):05b}_{read_bitfield(ins,6,2):05b}_{read_bitfield(ins,1,0):02b}")
+                                 f"0b{read_bitfield(ins, 15, 13):03b}_{read_bitfield(ins, 12, 12):01b}_{read_bitfield(ins, 11, 7):05b}_{read_bitfield(ins, 6, 2):05b}_{read_bitfield(ins, 1, 0):02b}")
         else:
             if not self._pc_changed:
                 self.pc += length
