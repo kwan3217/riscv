@@ -125,6 +125,17 @@ class CSR(Memory):
 
 
 class Zicsr(InstructionSet):
+    """
+    Implement the CSRs (Control and Status Registers). This is a separate 12-bit address
+    space which may be sparse. Access to these registers is restricted:
+        * Reading from a nonexistent CSR causes an Illegal Instruction exception
+        * Writing to a nonexistent CSR causes an Illegal Instruction exception
+        * Reading or writing to a CSR without enough privilege causes an Illegal Instruction exception
+        * Writing to a read-only CSR causes an Illegal Instruction exception
+        * If a register is partially writable and partially read-only, writes to read-only bits are
+          ignored and do not cause an exception. Simultaneous writes to writable bits are successful.
+    This emulator will enforce these restrictions.
+    """
     def add_state(self,hart:Hart):
         hart.csr=CSR()
     def interpret(self, hart: Hart, ins: int)->bool:
