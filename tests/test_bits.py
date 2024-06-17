@@ -5,7 +5,7 @@ Created: 6/14/24
 """
 import pytest
 
-from riscv.hart import signed, sign_extend
+from riscv.bits import sign_extend, signed
 
 
 @pytest.mark.parametrize(
