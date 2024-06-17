@@ -70,6 +70,85 @@ class WrongInterpreter(ValueError):
     pass
 
 
+class IntCause(Enum):
+    # Software interrupts. Trigger this by writing the "software interrupt pending"
+    # (xSIP) bit in the correct CSR (see privileged section 4.1.5)
+    USER_SOFTWARE_INTERRUPT = 0
+    SUPERVISOR_SOFTWARE_INTERRUPT = 1
+    # HYPERVISOR_SOFTWARE_INTERRUPT=2  #Seem to be leaving slots for a layer in between M and S
+    MACHINE_SOFTWARE_INTERRUPT = 3
+    # Timer interrupts. These are intended to be triggered on a regular time basis
+    # as described in privileged section 3.1.10
+    USER_TIMER_INTERRUPT=4
+    SUPERVISOR_TIMER_INTERRUPT=5
+    #HYPERVISOR_TIMER_INTERRUPT=6
+    MACHINE_TIMER_INTERRUPT=7
+    # External interrupts, triggered by an external source like an interrupt pin
+    USER_EXTERNAL_INTERRUPT=8
+    SUPERVISOR_EXTERNAL_INTERRUPT=9
+    #HYPERVISOR_EXTERNAL_INTERRUPT=10
+    MACHINE_EXTERNAL_INTERRUPT=11
+    # 12-15 are reserved for future standard use
+    # >=16 are reserved for plaform use (IE won't be used by future standards)
+
+
+class ExcCause(Exception):
+    INSTRUCTION_ADDRESS_MISALIGNED=0
+    INSTRUCTION_ACCESS_FAULT=1
+    ILLEGAL_INSTRUCTION=2
+    BREAKPOINT=3
+    LOAD_ADDRESS_MISALIGNED=4
+    LOAD_ACCESS_FAULT=5
+    STORE_AMO_ADDRESS_MISALIGNED=6
+    STORE_AMO_ACCESS_FAULT=7
+    ECALL_FROM_U_MODE=8
+    ECALL_FROM_S_MODE=9
+    #ECALL_FROM_H_MODE=10
+    ECALL_FROM_M_MODE=11
+    INSTRUCTION_PAGE_FAULT=12
+    LOAD_PAGE_FAULT=13
+    #14 is reserved for future standard use
+    STORE_AMO_PAGE_FAULT=15
+    #16-23 reserved for future standard use
+    #24-31 reserved for custom use
+    #32-47 reserved for future standard use
+    #48-63 reserved for custom use
+    #>=64 reserved for future standard use
+
+
+class RVException(Exception):
+    """
+    This is an architecture exception as defined in the architecture
+    manuals. If an instruction raises this exception, it must do so
+    *before* causing any observable state change to the hart, IE
+    register write, CSR read/write, or memory read/write.
+
+    The Python code around the emulator is the execution environment.
+    When it catches this exception, it should do everything that an EEI
+    should do, like set CSRs with current pc, set cause registers, etc
+    and then stuff the pc with the value from the correct CSR. It can
+    then let the emulated hart continue to run.
+    """
+    def __init__(self,*,message:str=None,is_interrupt:bool,cause:int):
+        super().__init__(message)
+        self.is_interrupt=is_interrupt
+        self.cause=cause
+
+
+class IllegalInstruction(RVException):
+    """
+    Raise this if the given bit pattern is resolved to the correct
+    instruction, but either the encoding will never be valid (for
+    instance an all-zero instruction is specified to be illegal)
+    or something goes wrong while executing the instruction. Eventually
+    an illegal instruction will do whatever exception is specified
+    in the privileged architecture manual. For now we will just
+    not handle the exception and let Python handle the failure.
+    """
+    def __init(self,message:str=None):
+        super().__init__(message=message,is_interrupt=False,cause=int(ExcCause.ILLEGAL_INSTRUCTION))
+
+
 class InstructionInterpreter:
     """
     This class represents code which interprets an instruction.
@@ -204,7 +283,7 @@ class Hart:
         else:
             # There is a proposal for instructions longer than 32-bits,
             # but it is not considered frozen and no instructions use it.
-            raise ValueError("Instruction is longer than 32-bits, spec is not frozen")
+            raise IllegalInstruction("Instruction is longer than 32-bits, spec is not frozen")
     def exec_one(self):
         length,ins=self.fetch()
         handled=False
