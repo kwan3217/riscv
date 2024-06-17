@@ -195,20 +195,20 @@ class Zicsr(InstructionSet):
             self.op=op
         def execute(self, ins: int, hart: Hart) -> None:
             p = decode(ins)
-            if p.imm not in hart.csr:
-                hart.csr[p.imm]=0
             if p.rd==0:
                 # Special case -- if would copy csr to x0, instead
                 # don't read csr at all and don't trigger any read
                 # side-effects. Just write rs1 to csr.
-                hart.csr[p.imm]=self.op(hart.csr[p.imm],hart.x[p.rs1])
-            # Normal case -- simultaneously copy csr to rd and rs1 to csr. When done,
-            # rd will have old csr value and csr will have old rs1 value. if rd==rs1,
-            # this is an atomic swap.
-            old_csr=hart.csr[p.imm]
+                old_csr=0
+            else:
+                old_csr = hart.csr[p.imm]
             old_reg=hart.x[p.rs1]
-            hart.csr[p.imm]=self.op(old_csr,old_reg)
             hart.x[p.rd]=old_csr
+            # Special case: If using rs1=0, IE x0 as mask, don't
+            # write to the csr at all and don't trigger any write
+            # side effects.
+            if p.rs1!=0:
+                hart.csr[p.imm]=self.op(old_csr,old_reg)
         def disasm(self, ins: int, XLEN: int):
             p = decode(ins)
             return f"{self.name:7s}x{p.rd:2},x{p.rs1:2},{p.imm:12}"
@@ -223,6 +223,45 @@ class Zicsr(InstructionSet):
                 return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}]"
             else:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}],CSR[{name}]{self.symbol}{self.abi_regnames[p.rs1][self.nameidx]}"
+    class CSRRW(InstructionInterpreter):
+        """
+        CSR Read and Write -- perform the following two operations
+        simultaneously and atomically:
+
+        * If rd isn't x0, then read the CSR and write it to rd,
+          triggering whatever side effects a read of that CSR
+          may have. If rd *is* x0, don't read the CSR and don't
+          trigger the read side-effects.
+        * Write the value in rs1 to the CSR.
+
+        """
+        def execute(self, ins: int, hart: Hart) -> None:
+            p = decode(ins)
+            if p.rd==0:
+                # Special case -- if would copy csr to x0, instead
+                # don't read csr at all and don't trigger any read
+                # side-effects. Just write rs1 to csr.
+                old_csr=0
+            else:
+                # Normal case -- simultaneously copy csr to rd and rs1 to csr. When done,
+                # rd will have old csr value and csr will have old rs1 value. It is
+                # specifically allowed for rd==rs1, which results in a proper swap.
+                old_csr=hart.csr[p.imm]
+            old_reg=hart.x[p.rs1]
+            hart.x[p.rd]=old_csr
+            hart.csr[p.imm]=old_reg
+        def disasm(self, ins: int, XLEN: int):
+            p = decode(ins)
+            return f"CSRRW  x{p.rd:2},x{p.rs1:2},{p.imm:12}"
+        def formula(self, ins: int, XLEN: int):
+            p = decode(ins)
+            name=f"0x{p.imm:03x}"
+            if p.imm in csrnames:
+                name+=f" ({csrnames[p.imm][1]})"
+            if p.rd==0:
+                return f"CSR[{name}]={self.abi_regnames[p.rs1][self.nameidx]}"
+            else:
+                return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}],CSR[{name}]={self.abi_regnames[p.rs1][self.nameidx]}"
     class CSRI(InstructionInterpreter):
         """
         CSR Read and Set Immediate -- Same as above, but use an immediate value instead of
@@ -264,7 +303,7 @@ class Zicsr(InstructionSet):
                 return f"CSR[{name}]{self.symbol}{p.rs1}"
             else:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}],CSR[{name}]{self.symbol}{p.rs1}"
-    ins_exec[0b001]=CSRR("CSRRW","=",lambda csr,rs1:rs1)
+    ins_exec[0b001]=CSRRW()
     ins_exec[0b010]=CSRR("CSRRS","|=",lambda csr,rs1:csr|rs1)
     ins_exec[0b011]=CSRR("CSRRC","&=~",lambda csr,rs1:csr&~rs1)
     ins_exec[0b101]=CSRI("CSRRWI","=",lambda csr,rs1:rs1)
