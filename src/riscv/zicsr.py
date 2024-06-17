@@ -6,7 +6,9 @@ Created: 6/11/24
 from dataclasses import dataclass
 from typing import Callable
 
-from riscv.hart import read_bitfield, read_bitfields, InstructionSet, Hart, InstructionInterpreter, WrongInterpreter
+from riscv.hart import InstructionSet, Hart, InstructionInterpreter, WrongInterpreter, \
+    Memory, IllegalInstruction
+from riscv.bits import read_bitfield, read_bitfields
 from riscv.rv32i import ParsedInstruction, I
 
 
