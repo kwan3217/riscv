@@ -108,9 +108,25 @@ csrnames = {
     0x7B3:("DRW","dscratch1","Debug scratch register 1"),}
 
 
+class CSR(Memory):
+    def __getitem__(self,key):
+        if key not in csrnames:
+            raise IllegalInstruction(f"Tried to read CSR[0x{key:03x}] which doesn't exist")
+        if key not in self:
+            super().__setitem__(key,0)
+        value=super().__getitem__(key)
+        print(f"Read  CSR[0x{key:03x}{' ('+csrnames[key][1]+')' if key in csrnames else ''}], value=0x{value:08x}  {' # '+csrnames[key][2] if key in csrnames else ''}")
+        return value
+    def __setitem__(self,key,value):
+        if key not in csrnames:
+            raise IllegalInstruction(f"Tried to write to CSR[0x{key:03x}] which doesn't exist")
+        print(f"Write CSR[0x{key:03x}{' ('+csrnames[key][1]+')' if key in csrnames else ''}], value=0x{value:08x} {' # '+csrnames[key][2] if key in csrnames else ''}")
+        value=super().__setitem__(key,value)
+
+
 class Zicsr(InstructionSet):
     def add_state(self,hart:Hart):
-        hart.csr={}
+        hart.csr=CSR()
     def interpret(self, hart: Hart, ins: int)->bool:
         p=decode(ins)
         if p.opcode!=0b1110011:
