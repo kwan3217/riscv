@@ -294,16 +294,16 @@ class RV32I(InstructionSet):
             self.op = op
 
         def execute(self, ins: int, hart: Hart) -> None:
-            p = I(ins, hart.XLEN, True)
+            p = I(ins, hart.XLEN, False)
             result = self.op(hart, hart.x[p.rs1], p.imm)
             hart.x[p.rd] = result
 
         def disasm(self, ins: int, XLEN: int):
-            p = I(ins, XLEN, True)
+            p = I(ins, XLEN, False)
             return f"{self.name:7s}x{p.rd:2},x{p.rs1:2},{p.imm:12}"
 
         def formula(self, ins: int, XLEN: int):
-            p = I(ins, XLEN, True)
+            p = I(ins, XLEN, False)
             if p.rs1 == 0:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}={p.imm}"
             if "ADD" in self.name and p.imm < 0:
