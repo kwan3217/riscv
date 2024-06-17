@@ -6,8 +6,9 @@ Created: 6/11/24
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-from riscv.hart import read_bitfield, signed, read_bitfields, InstructionSet, Hart, InstructionInterpreter, bitmask, \
-    Opcode, WrongInterpreter
+import riscv.bits
+from riscv.hart import InstructionSet, Hart, InstructionInterpreter, Opcode, WrongInterpreter
+from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
 
 
 @dataclass
