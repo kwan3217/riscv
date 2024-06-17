@@ -2,7 +2,7 @@ all: example.hex
 ARCH=rv32ic
 ABI=ilp32
 OPT=-Og
-PREFIX=riscv32-unknown-elf
+PREFIX=riscv64-unknown-elf
 
 example.hex: example
 	$(PREFIX)-objcopy -O ihex $< $@
