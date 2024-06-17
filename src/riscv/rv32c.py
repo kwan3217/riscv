@@ -442,6 +442,29 @@ class RV32C(InstructionSet):
                     return f"{self.abi_regnames[2][self.nameidx]}+={p.imm}"
                 else:
                     return f"{self.abi_regnames[2][self.nameidx]}-={-p.imm}"
+    class C_ADDI4SPN(InstructionInterpreter):
+        """
+        Execute C.ADDI4SPN.
+        """
+        def execute(self, ins: int, hart: 'Hart') -> None:
+            p=CIW(ins)
+            if p.imm==0:
+                if p.rd==0:
+                    raise IllegalInstruction("All zero instruction, permanently illegal")
+                raise WrongInterpreter("In C.ADDI4SPN, have a zero immediate")
+            hart.x[p.rd]=hart.x[2]+p.imm
+        def disasm(self, ins: int, XLEN: int) -> str:
+            p=CIW(ins)
+            if p.imm==0:
+                if p.rd==0:
+                    return "C.UNIMP"
+            return f"C.ADDI4SPN x{p.rd:2d},{p.imm:12d}"
+        def formula(self, ins: int, XLEN: int):
+            p=CIW(ins)
+            if p.imm==0:
+                if p.rd==0:
+                    return "C.UNIMP"
+            return f"{self.abi_regnames[p.rd][self.nameidx]}=stackptr+{p.imm}"
     class C_EBREAK_JALR_ADD(InstructionInterpreter):
         """
         Execute C.EBREAK, C.JALR, or C.ADD. These all
