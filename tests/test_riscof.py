@@ -117,8 +117,7 @@ from riscv.zicsr import Zicsr
 
 @pytest.mark.parametrize(
     "extname,testname",
-    [("C","cadd"),
-     ("C", "caddi"),]+
+    [("C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
     [("I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]
 )
 def test_riscof(extname:str,testname:str,max_cycles:int=100000):
@@ -138,7 +137,7 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
     sigfn=f"riscof_work/rv32i_m/{extname}/src/{testname}-01.S/ref/ref.sig"
     for sym,addr in syms.items():
         print(f"{sym:32s}0x{addr:08x}")
-    hart = Hart((RV32I(), Zicsr(),RV32C()),halts={syms["exit_cleanup"]},breakpoints={0x8000_00f8})
+    hart = Hart((RV32I(), Zicsr(),RV32C()),halts={syms["exit_cleanup"]},breakpoints={0x8000_0140})
     hart.mem.stuff_elf(elffn)
     hart.pc = syms["rvtest_entry_point"]
     # Set up a run command for running the program with Spike to generate a signature.
@@ -163,8 +162,7 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
         try:
             hart.exec_one()
         except StopIteration:
-            import traceback
-            traceback.print_exc()
+            print("Halt at pc=0x{hart.pc:08x}")
             break
         cycles+=1
     assert cycles<max_cycles,"Hit maximum cycles"
