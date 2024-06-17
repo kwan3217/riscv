@@ -406,7 +406,6 @@ class RV32C(InstructionSet):
         C.ADDI16SP has rd==2. The bit order of the constants is
         different between the two instructions.
         """
-
         def execute(self, ins: int, hart: 'Hart') -> None:
             p=CI(ins,imm_signed=True,imm_bitfield=((12,12,17),(6,2,12)))
             if p.rd!=0 and p.rd!=2:
@@ -513,8 +512,94 @@ class RV32C(InstructionSet):
                 return "C.JALR"
             else:
                 return "C.EBREAK"
+    class C_RpRp(InstructionInterpreter):
+        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
+            self.name = name
+            self.symbol = symbol
+            self.op = op
+        def execute(self, ins: int, hart: Hart) -> None:
+            p = CA(ins)
+            result = self.op(hart, hart.x[p.rs1], hart.x[p.rs2])
+            hart.x[p.rd] = result
+        def disasm(self, ins: int, XLEN: int):
+            p = CA(ins)
+            return f"{self.name:7s}x{p.rs1:2},x{p.rs2:2}"
+        def formula(self, ins: int, XLEN: int):
+            p = CA(ins)
+            if "%s" in self.symbol:
+                return f"{self.abi_regnames[p.rd][self.nameidx]}={self.symbol % (self.abi_regnames[p.rs1][self.nameidx], self.abi_regnames[p.rs2][self.nameidx])}"
+            else:
+                return f"{self.abi_regnames[p.rd][self.nameidx]}{self.symbol}={self.abi_regnames[p.rs2][self.nameidx]}"
+    decode_100_01_table={
+        #bBA bC  b65
+        0b00:None,
+        0b01:None,
+        0b10:C_ANDI(),
+        0b11:{
+            0b0:{
+                0b00:C_RpRp('C.SUB','-',lambda hart,a,b:a-b),
+                0b01:C_RpRp('C.XOR','^',lambda hart,a,b:a^b),
+                0b10:C_RpRp('C.OR' ,'|',lambda hart,a,b:a|b),
+                0b11:C_RpRp('C.AND','&',lambda hart,a,b:a&b),
+            },
+            0b1:None
+        }
+    }
+    @staticmethod
+    def decode_100_01(ins):
+        bBA=read_bitfield(ins,11,10) # Extract bits 11 (B) and 10 (A)
+        bC =read_bitfield(ins,12,12)
+        b65=read_bitfield(ins, 6, 5)
+        itp=RV32C.decode_100_01_table[bBA]
+        if itp is None:
+            raise WrongInterpreter()
+        elif isinstance(itp,Mapping):
+            itp=itp[bC]
+            if itp is None:
+                raise WrongInterpreter()
+            elif isinstance(itp,Mapping):
+                itp=itp[b65]
+                return itp
+            else:
+                return itp
+        else:
+            return itp
+    class C_J(InstructionInterpreter):
+        def execute(self, ins: int, hart: Hart) -> None:
+            p = CJ(ins)
+            target = hart.pc
+            target += p.target
+            target &= bitmask(31, 1)
+            hart.pc = target
+        def disasm(self, ins: int, XLEN: int):
+            p = CJ(ins)
+            return f"C.J    {p.target:12}"
+        def formula(self, ins: int, XLEN: int):
+            p = CJ(ins)
+            if p.target>0:
+                return f"pc+={p.target}"
+            else:
+                return f"pc-={-p.target}"
+    class C_Branch(InstructionInterpreter):
+        def __init__(self, name: str, symbol: str, condition: Callable[[int, int], bool]):
+            self.name = name
+            self.symbol = symbol
+            self.condition = condition
+        def execute(self, ins: int, hart: Hart) -> None:
+            p = CB(ins, ((12,12,8),(11,10,3),(6,5,6),(4,3,1),(2,2,5)),hart.XLEN)
+            if self.condition(hart.x[p.rs1], 0):
+                target = hart.pc
+                target += signed(p.imm, 12)
+                hart.pc = target
+        def disasm(self, ins: int, XLEN: int):
+            p = CB(ins, ((12,12,8),(11,10,3),(6,5,6),(4,3,1),(2,2,5)),XLEN)
+            return f"{self.name:7s}x{p.rs1:2},{p.imm:12}"
+        def formula(self, ins: int, XLEN: int):
+            p = CB(ins, ((12,12,8),(11,10,3),(6,5,6),(4,3,1),(2,2,5)),XLEN)
+            return f"if {self.abi_regnames[p.rs1][self.nameidx]}{self.symbol}0 pc=pc{'+' if p.imm >= 0 else ''}{p.imm}"
     ins_exec={
         0b00:{
+            0b000:C_ADDI4SPN(),
             0b010:C_LW(),
             0b110:C_SW(),
         },
@@ -523,6 +608,10 @@ class RV32C(InstructionSet):
             0b001:C_JAL(),
             0b010:C_LI(),
             0b011:C_LUI_ADDI16SP(),
+            0b100:decode_100_01,
+            0b101:C_J(),
+            0b110:C_Branch("C.BEQZ","==",lambda a,b:a==b),
+            0b111:C_Branch("C.BNEZ","!=",lambda a,b:a!=b)
         },
         0b10: {
             0b010: C_LWSP(),
