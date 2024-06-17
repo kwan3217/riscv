@@ -130,6 +130,8 @@ dmypy.json
 
 # GCC compiled objects
 *.o
+*.bin
+*.hex
 
 # Disassemblies for compiled objects
 *.o.map
@@ -137,8 +139,8 @@ dmypy.json
 # Disassemblies for compiled image
 *.lss
 
-# Imperas test cases
-/imperas-riscv-tests/
+# Coverage report
+/htmlReport/
 
 # Toolchains etc
 /riscv-gnu-toolchain*/
@@ -146,3 +148,5 @@ dmypy.json
 /riscv-isa-sim*/
 /riscv-opcodes*/
 /sail-riscv*/
+/riscv-arch-test/
+
