@@ -58,6 +58,15 @@ class Opcode(Enum):
 
 
 class WrongInterpreter(ValueError):
+    """
+    Raise this if the given bit pattern reaches an interpreter,
+    but doesn't match this interpreter. If it's raised, no other
+    instruction in the same instruction set extension is given
+    a chance, but other extensions will be given a chance. Raise
+    this before any changes to the hart or memory state are made.
+    Usually, we will do this for "reserved" instruction encodings
+    to give another instruction set a chance to use that encoding.
+    """
     pass
 
 
