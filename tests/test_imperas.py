@@ -4,7 +4,8 @@ Test all the Foos! (And the Bars!)
 from subprocess import run
 
 import pytest
-from riscv.hart import sign_extend, signed, Hart, Memory, read_bitfield
+from riscv.hart import Hart, Memory
+from riscv.bits import read_bitfield, sign_extend, signed
 from riscv.rv32i import RV32I
 from riscv.zicsr import Zicsr
 
