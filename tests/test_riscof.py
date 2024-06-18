@@ -112,6 +112,7 @@ from elf import read_syms
 from riscv.hart import Hart
 from riscv.rv32c import RV32C
 from riscv.rv32i import RV32I
+from riscv.spike import spike_sig
 from riscv.zicsr import Zicsr
 
 
@@ -132,13 +133,11 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
     :return:
     """
     elffn=f"riscof_work/rv32i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
-    syms=read_syms(elffn)
-    spikefn=f"riscof_work/rv32i_m/{extname}/src/{testname}-01.S/ref/ref.spike"
-    sigfn=f"riscof_work/rv32i_m/{extname}/src/{testname}-01.S/ref/ref.sig"
+    hart = Hart((RV32I(), Zicsr(),RV32C()))
+    syms=hart.mem.stuff_elf(elffn)
+    hart.halts.add(syms["exit_cleanup"])
     for sym,addr in syms.items():
         print(f"{sym:32s}0x{addr:08x}")
-    hart = Hart((RV32I(), Zicsr(),RV32C()),halts={syms["exit_cleanup"]},breakpoints={0x8000_0140})
-    hart.mem.stuff_elf(elffn)
     hart.pc = syms["rvtest_entry_point"]
     cycles=0
     while cycles<max_cycles:
