@@ -162,7 +162,7 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
         try:
             hart.exec_one()
         except StopIteration:
-            print("Halt at pc=0x{hart.pc:08x}")
+            print(f"Halt at pc=0x{hart.pc:08x}")
             break
         cycles+=1
     assert cycles<max_cycles,"Hit maximum cycles"
