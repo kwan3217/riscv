@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Callable, Mapping
 
 import riscv.bits
-from riscv.hart import InstructionSet, Hart, InstructionInterpreter, Opcode, WrongInterpreter
+from riscv.hart import InstructionSet, Hart, InstructionHandler, Opcode, WrongInterpreter
 from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
 
 
@@ -120,7 +120,7 @@ class RV32I(InstructionSet):
             raise WrongInterpreter("Not found in RV32I instruction table")
         print(f"{hart.pc:08x} -- {ins:08x}  {ins_type.disasm(ins,hart.XLEN)}  # {ins_type.formula(ins,hart.XLEN)}")
         ins_type.execute(ins, hart)
-    class LUI(InstructionInterpreter):
+    class LUI(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = U(ins, hart.XLEN, False)
             hart.x[p.rd] = p.imm
@@ -130,7 +130,7 @@ class RV32I(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = U(ins, XLEN, False)
             return f"{self.abi_regnames[p.rd][self.nameidx]}=0x{p.imm:08x}"
-    class AUIPC(InstructionInterpreter):
+    class AUIPC(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = U(ins, hart.XLEN, True)
             hart.x[p.rd] = hart.pc + p.imm
@@ -142,7 +142,7 @@ class RV32I(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = U(ins, XLEN, True)
             return f"r{p.rd}=pc{'+' if p.imm >= 0 else ''}{p.imm}"
-    class JAL(InstructionInterpreter):
+    class JAL(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = J(ins, hart.XLEN, True)
             retaddr=hart.pc+4
@@ -160,7 +160,7 @@ class RV32I(InstructionSet):
                 return f"pc=pc{'+' if p.imm >= 0 else ''}{p.imm}"
             else:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}=pc+4, pc=pc{'+' if p.imm >= 0 else ''}{p.imm}"
-    class JALR(InstructionInterpreter):
+    class JALR(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = I(ins, hart.XLEN, True)
             target = hart.x[p.rs1]
@@ -181,7 +181,7 @@ class RV32I(InstructionSet):
             if p.imm != 0:
                 result += f"{'+' if p.imm >= 0 else ''}{p.imm}"
             return result
-    class LOAD(InstructionInterpreter):
+    class LOAD(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = I(ins, hart.XLEN, True)
             unsigned = read_bitfield(p.funct3, 2, 2)
@@ -204,7 +204,7 @@ class RV32I(InstructionSet):
             p = I(ins, XLEN, True)
             cast = ["i8", "i16", "i32", None, "u8", "u16"]
             return f"r{p.rd}={cast[p.funct3]}(mem[r{p.rs1}{'+' if p.imm >= 0 else ''}{p.imm}])"
-    class STORE(InstructionInterpreter):
+    class STORE(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = S(ins, hart.XLEN, True)
             addr = hart.x[p.rs1]  # base
@@ -226,7 +226,7 @@ class RV32I(InstructionSet):
             size = 1 << read_bitfield(p.funct3, 1, 0)
             cast = [None, "b8", "b16", None, "b32"]
             return f"mem[{self.abi_regnames[p.rs1][0]}{'+' if p.imm >= 0 else ''}{p.imm}]={cast[size]}({self.abi_regnames[p.rs2][0]})"
-    class Branch(InstructionInterpreter):
+    class Branch(InstructionHandler):
         def __init__(self, name: str, symbol: str, condition: Callable[['Hart',int, int], bool]):
             self.name = name
             self.symbol = symbol
@@ -248,7 +248,7 @@ class RV32I(InstructionSet):
                 sym = f"%s{self.symbol}%s"
             sym = sym % (self.abi_regnames[p.rs1][self.nameidx], self.abi_regnames[p.rs2][self.nameidx])
             return f"if {sym} pc=pc{'+' if p.imm >= 0 else ''}{p.imm}"
-    class Nop(InstructionInterpreter):
+    class Nop(InstructionHandler):
         def __init__(self, name: str = "NOP", comment: str = None):
             """
 
@@ -264,7 +264,7 @@ class RV32I(InstructionSet):
             return self.name
         def formula(self, ins: int, XLEN: int):
             return self.comment
-    class RegImmed(InstructionInterpreter):
+    class RegImmed(InstructionHandler):
         """
         An instruction which acts on a register and an immediate.
         """
@@ -314,7 +314,7 @@ class RV32I(InstructionSet):
                 return f"{self.abi_regnames[p.rd][self.nameidx]}={self.symbol % (self.abi_regnames[p.rs1][self.nameidx], p.imm)}"
             else:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}={self.abi_regnames[p.rs1][self.nameidx]}{this_symbol}{p.imm}"
-    class RegReg(InstructionInterpreter):
+    class RegReg(InstructionHandler):
         def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
             self.name = name
             self.symbol = symbol
@@ -332,7 +332,7 @@ class RV32I(InstructionSet):
                 return f"{self.abi_regnames[p.rd][self.nameidx]}={self.symbol % (self.abi_regnames[p.rs1][self.nameidx], self.abi_regnames[p.rs2][self.nameidx])}"
             else:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}={self.abi_regnames[p.rs1][self.nameidx]}{self.symbol}{self.abi_regnames[p.rs2][self.nameidx]}"
-    class SYSTEM(InstructionInterpreter):
+    class SYSTEM(InstructionHandler):
         def __init__(self, name: str = "Undefined", comment: str = None, message: str = None):
             """
 

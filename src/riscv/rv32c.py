@@ -70,7 +70,7 @@ Created: 6/12/24
 from dataclasses import dataclass
 from typing import Callable, Mapping, Iterable
 
-from riscv.hart import InstructionSet, Hart, WrongInterpreter, InstructionInterpreter, \
+from riscv.hart import InstructionSet, Hart, WrongInterpreter, InstructionHandler, \
     IllegalInstruction
 from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
 
@@ -222,7 +222,7 @@ class RV32C(InstructionSet):
                 if isinstance(ins_type,Mapping):
                     b12=read_bitfield(ins,12,12)
                     ins_type=ins_type[b12]
-                elif isinstance(ins_type,InstructionInterpreter):
+                elif isinstance(ins_type, InstructionHandler):
                     pass
                 else:
                     ins_type=ins_type(ins)
@@ -231,7 +231,7 @@ class RV32C(InstructionSet):
         print(f"{hart.pc:08x} -- {ins:04x}      {ins_type.disasm(ins,hart.XLEN)}  # {ins_type.formula(ins,hart.XLEN)}")
         ins_type.execute(ins, hart)
     #        opcode  Funct3  Funct7
-    class C_ADDI(InstructionInterpreter):
+    class C_ADDI(InstructionHandler):
         """
         Execute C.ADDI, as well as C.NOP and C.HINT. The latter two
         are implemented by adding immediate 0 to a particular register.
@@ -262,7 +262,7 @@ class RV32C(InstructionSet):
                     return f"{self.abi_regnames[p.rd][self.nameidx]}+={p.imm}"
                 else:
                     return f"{self.abi_regnames[p.rd][self.nameidx]}-={-p.imm}"
-    class C_ANDI(InstructionInterpreter):
+    class C_ANDI(InstructionHandler):
         """
         Execute C.ANDI, as well as C.NOP and C.HINT. The latter two
         are implemented by adding immediate 0 to a particular register.
@@ -279,7 +279,7 @@ class RV32C(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p=CB(ins,imm_fields=((12, 12,5),(6, 2,0)),XLEN=XLEN)
             return f"{self.abi_regnames[p.rd][self.nameidx]}&=0x{p.imm:08x}"
-    class C_SWSP(InstructionInterpreter):
+    class C_SWSP(InstructionHandler):
         """
         Execute C.SWSP
         """
@@ -295,7 +295,7 @@ class RV32C(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = CSS(ins,((12, 9,2),(8,7,6)))
             return f"mem[{self.abi_regnames[p.rs1][self.nameidx]}+{p.imm}]=b32({self.abi_regnames[p.rs2][self.nameidx]})"
-    class C_LW(InstructionInterpreter):
+    class C_LW(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = CL(ins,((12,10,3),(6,6,2),(5,5,6)))
             size = 4
@@ -311,7 +311,7 @@ class RV32C(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = CL(ins,((12,10,3),(6,6,2),(5,5,6)))
             return f"{self.abi_regnames[p.rd][self.nameidx]}=i32(mem[{self.abi_regnames[p.rs1][self.nameidx]}{'+'+str(p.imm) if p.imm>0 else ''}])"
-    class C_SW(InstructionInterpreter):
+    class C_SW(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = CS(ins,((12,10,3),(6,6,2),(5,5,6)))
             size = 4
@@ -324,7 +324,7 @@ class RV32C(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = CS(ins,((12,10,3),(6,6,2),(5,5,6)))
             return f"b32(mem[{self.abi_regnames[p.rs1][self.nameidx]}{'+'+str(p.imm) if p.imm>0 else ''}])={self.abi_regnames[p.rs2][self.nameidx]}"
-    class C_LWSP(InstructionInterpreter):
+    class C_LWSP(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = CI(ins,imm_bitfield=((12,12,5),(6,4,2),(3,2,6)),imm_signed=False)
             size = 4
@@ -340,7 +340,7 @@ class RV32C(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = CI(ins,imm_bitfield=((12,12,5),(6,4,2),(3,2,6)),imm_signed=False)
             return f"{self.abi_regnames[p.rd][self.nameidx]}=i32(mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p.imm) if p.imm>0 else ''}])"
-    class C_JR_MV(InstructionInterpreter):
+    class C_JR_MV(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = CR(ins)
             if p.rs2!=0 and p.rd!=0:
@@ -362,7 +362,7 @@ class RV32C(InstructionSet):
                 return f"{self.abi_regnames[p.rd][self.nameidx]}={self.abi_regnames[p.rs2][self.nameidx]}"
             else:
                 raise WrongInterpreter()
-    class C_JAL(InstructionInterpreter):
+    class C_JAL(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = CJ(ins)
             hart.x[1] = hart.pc+2
@@ -376,7 +376,7 @@ class RV32C(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = CJ(ins)
             return f"{self.abi_regnames[1][self.nameidx]}=pc+2, pc=pc{'+' if p.target >= 0 else ''}{p.target}"
-    class C_LI(InstructionInterpreter):
+    class C_LI(InstructionHandler):
         """
         Execute C.LI, as well as C.HINT. The latter is
         implemented by loading the immediate to x0 which would discard it.
@@ -400,7 +400,7 @@ class RV32C(InstructionSet):
                 return f"Hint (No operation)"
             else:
                 return f"{self.abi_regnames[p.rd][self.nameidx]}={p.imm}"
-    class C_LUI_ADDI16SP(InstructionInterpreter):
+    class C_LUI_ADDI16SP(InstructionHandler):
         """
         Execute C.LUI and C.ADDI16SP. C.LUI has rd!=2, while
         C.ADDI16SP has rd==2. The bit order of the constants is
@@ -441,7 +441,7 @@ class RV32C(InstructionSet):
                     return f"{self.abi_regnames[2][self.nameidx]}+={p.imm}"
                 else:
                     return f"{self.abi_regnames[2][self.nameidx]}-={-p.imm}"
-    class C_ADDI4SPN(InstructionInterpreter):
+    class C_ADDI4SPN(InstructionHandler):
         """
         Execute C.ADDI4SPN.
         """
@@ -464,7 +464,7 @@ class RV32C(InstructionSet):
                 if p.rd==0:
                     return "C.UNIMP"
             return f"{self.abi_regnames[p.rd][self.nameidx]}=stackptr+{p.imm}"
-    class C_EBREAK_JALR_ADD(InstructionInterpreter):
+    class C_EBREAK_JALR_ADD(InstructionHandler):
         """
         Execute C.EBREAK, C.JALR, or C.ADD. These all
         have the same opcode and funct bits, so they
@@ -512,7 +512,7 @@ class RV32C(InstructionSet):
                 return "C.JALR"
             else:
                 return "C.EBREAK"
-    class C_RpRp(InstructionInterpreter):
+    class C_RpRp(InstructionHandler):
         def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
             self.name = name
             self.symbol = symbol
@@ -564,7 +564,7 @@ class RV32C(InstructionSet):
                 return itp
         else:
             return itp
-    class C_J(InstructionInterpreter):
+    class C_J(InstructionHandler):
         def execute(self, ins: int, hart: Hart) -> None:
             p = CJ(ins)
             target = hart.pc
@@ -580,7 +580,7 @@ class RV32C(InstructionSet):
                 return f"pc+={p.target}"
             else:
                 return f"pc-={-p.target}"
-    class C_Branch(InstructionInterpreter):
+    class C_Branch(InstructionHandler):
         def __init__(self, name: str, symbol: str, condition: Callable[[int, int], bool]):
             self.name = name
             self.symbol = symbol

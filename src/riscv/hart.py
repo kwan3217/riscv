@@ -149,7 +149,7 @@ class IllegalInstruction(RVException):
         super().__init__(message=message,is_interrupt=False,cause=int(ExcCause.ILLEGAL_INSTRUCTION))
 
 
-class InstructionInterpreter:
+class InstructionHandler:
     """
     This class represents code which interprets an instruction.
     """
@@ -260,7 +260,7 @@ class Hart:
         return self._pc
     def dump(self):
         for i,x in enumerate(self.x._x):
-            print(f"x%02d({InstructionInterpreter.abi_regnames[i][0]:4s}):0x%0{self.XLEN//4}x   "%(i,x),end='')
+            print(f"x%02d({InstructionHandler.abi_regnames[i][0]:4s}):0x%0{self.XLEN // 4}x   " % (i, x), end='')
             if i%4==3:
                 print()
     pc=property(get_pc,set_pc)
