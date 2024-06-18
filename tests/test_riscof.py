@@ -155,7 +155,9 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
     some_bad=False
     for addr,ref in sig.items():
         dut=hart.mem.load(4,addr)
-        addrdump=f"addr=0x{addr:08x}, ref=0x{ref:08x}, dut=0x{dut:08x}"
+        addrdump=f"addr=0x{addr:08x}, ref=0x{ref:08x}, dut=0x{dut:08x}{'*' if ref!=dut else ''}"
         print(addrdump)
-        assert ref==dut,f"Bad signature {addrdump}"
+        if ref!=dut:
+            some_bad=True
+    assert not some_bad,f"Bad signature"
 
