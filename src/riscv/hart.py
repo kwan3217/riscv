@@ -12,7 +12,8 @@ from riscv.bits import bitmask, read_bitfield, sign_extend, signed
 
 
 def main():
-    pass
+    from test_riscof import test_riscof
+    test_riscof("C","cebreak")
 
 
 if __name__ == "__main__":
