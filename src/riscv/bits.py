@@ -41,14 +41,6 @@ Created: 6/17/24
 from typing import Iterable
 
 
-def main():
-    pass
-
-
-if __name__ == "__main__":
-    main()
-
-
 def bitmask(bit1,bit0):
     """
     Make a bitmask.
