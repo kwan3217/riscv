@@ -140,22 +140,6 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
     hart = Hart((RV32I(), Zicsr(),RV32C()),halts={syms["exit_cleanup"]},breakpoints={0x8000_0140})
     hart.mem.stuff_elf(elffn)
     hart.pc = syms["rvtest_entry_point"]
-    # Set up a run command for running the program with Spike to generate a signature.
-    sigaddrs=range(syms['begin_signature'],syms['end_signature'],4)
-    with open(spikefn,"wt") as ouf:
-        print(f"until pc 0 {syms['exit_cleanup']:08x}",file=ouf)
-        for addr in sigaddrs:
-            print(f"mem {addr:08x}",file=ouf)
-        print(f"q",file=ouf)
-    # Run spike and get the signature
-    cmdline=f"spike -d --debug-cmd={spikefn} --isa=RV32IC --pc=0x{syms['rvtest_entry_point']:08x} {elffn} 2>&1 | tee {sigfn}"
-    result=run(cmdline,capture_output=True, shell=True)
-    # Read signature. Signature is in the form of 32-bit memory reads, with implied
-    # addresses from the begin_signature symbol up to but excluding end_signature.
-    sig={}
-    siglines=str(result.stdout,encoding='utf8').split("\n")
-    for addr,line in zip(sigaddrs,siglines):
-        sig[addr]=int(line[2:10],16)
     cycles=0
     while cycles<max_cycles:
         hart.dump()
@@ -167,6 +151,8 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
         cycles+=1
     assert cycles<max_cycles,"Hit maximum cycles"
     # Check signature
+    sig=spike_sig(elffn)
+    some_bad=False
     for addr,ref in sig.items():
         dut=hart.mem.load(4,addr)
         addrdump=f"addr=0x{addr:08x}, ref=0x{ref:08x}, dut=0x{dut:08x}"
