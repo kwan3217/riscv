@@ -195,6 +195,7 @@ class RV32I(InstructionSet):
             val = hart.mem.load(size, addr)
             if unsigned == 0:
                 val = signed(val, size * 8 - 1)
+            print(f"mem[0x{addr:0{size * 2}x}]->0x{val:0{size * 2}x}")
             hart.x[p.rd] = val
         def disasm(self, ins: int, XLEN: int):
             p = I(ins, XLEN, True)
@@ -215,7 +216,9 @@ class RV32I(InstructionSet):
                 raise WrongInterpreter("No such thing as a signed store")
             if size > 4:
                 raise WrongInterpreter(f"Unsupported size {size}")
-            hart.mem.store(size, addr, hart.x[p.rs2])
+            val=hart.x[p.rs2]
+            hart.mem.store(size, addr, val)
+            print(f"mem[0x{addr:0{size * 2}x}]<-0x{val:0{size * 2}x}")
         def disasm(self, ins: int, XLEN: int):
             p = S(ins, XLEN, True)
             size = 1 << read_bitfield(p.funct3, 1, 0)
