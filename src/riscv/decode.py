@@ -110,8 +110,9 @@ def compile_encoding(human_encoding:str)->tuple[compiled_encoding_bitmask,bitfie
                         break
             for field in full_field.split("/"):
                 fields[field]=((b1,b0,0),)
-    imm_subfields=[]                     #0123456788
-    for imm_bit,c in enumerate('0123456789ABCDEFGHIJ'):
+                                         #1         2         3
+    imm_subfields=[]                     #0123456789012345678901
+    for imm_bit,c in enumerate('0123456789ABCDEFGHIJKLMNOPQRSTUV'):
         if c in encoding:
             ins_bit=encoding.index(c)
             imm_subfields.append((ins_bit,ins_bit,imm_bit))
