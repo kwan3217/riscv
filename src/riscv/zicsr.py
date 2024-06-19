@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from typing import Callable
 
 from riscv.hart import InstructionSet, Hart, InstructionHandler, WrongInterpreter, \
-    Memory, IllegalInstruction
+    IllegalInstruction
+from riscv.memory import Memory
 from riscv.bits import read_bitfield, read_bitfields
 from riscv.rv32i import ParsedInstruction, I
 
