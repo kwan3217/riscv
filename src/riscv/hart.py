@@ -240,6 +240,8 @@ class Hart:
         if breakpoints is None:
             breakpoints=set()
         self.breakpoints=breakpoints
+        if halts is None:
+            halts=set()
         self.halts=halts
         self.XLEN=XLEN
         self.mem=mem
