@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Callable, Mapping
 
 import riscv.bits
+from riscv.decode import Handler
 from riscv.hart import InstructionSet, Hart, InstructionHandler, Opcode, WrongInterpreter
 from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
 
@@ -181,7 +182,11 @@ class RV32I(InstructionSet):
             if p.imm != 0:
                 result += f"{'+' if p.imm >= 0 else ''}{p.imm}"
             return result
-    class LOAD(InstructionHandler):
+    class Load(InstructionHandler):
+        def __init__(self,name:str,size:int,signed:bool):
+            self.name=name
+            self.size=size
+            self.signed=signed
         def execute(self, ins: int, hart: Hart) -> None:
             p = I(ins, hart.XLEN, True)
             unsigned = read_bitfield(p.funct3, 2, 2)
@@ -205,7 +210,10 @@ class RV32I(InstructionSet):
             p = I(ins, XLEN, True)
             cast = ["i8", "i16", "i32", None, "u8", "u16"]
             return f"r{p.rd}={cast[p.funct3]}(mem[r{p.rs1}{'+' if p.imm >= 0 else ''}{p.imm}])"
-    class STORE(InstructionHandler):
+    class Store(InstructionHandler):
+        def __init__(self, name: str, size: int):
+            self.name = name
+            self.size = size
         def execute(self, ins: int, hart: Hart) -> None:
             p = S(ins, hart.XLEN, True)
             addr = hart.x[p.rs1]  # base
@@ -357,79 +365,49 @@ class RV32I(InstructionSet):
             return self.comment
     #        opcode  Funct3  Funct7
     ins_exec={
-        Opcode.LUI  :LUI(),
-        Opcode.AUIPC:AUIPC(),
-        Opcode.JAL  :JAL(),
-        Opcode.JALR :{
-            0b000:JALR()
-        },
-        Opcode.BRANCH:{
-            0b000:Branch('BEQ', '==', lambda hart, rs1, rs2: rs1 == rs2),
-            0b001:Branch('BNE', '!=', lambda hart, rs1, rs2: rs1 != rs2),
-            0b100:Branch('BLT', 'signed(%s)<signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) < hart.signed(rs2)),
-            0b101:Branch('BGE', 'signed(%s)>=signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) >= hart.signed(rs2)),
-            0b110:Branch('BLTU', '<', lambda hart, rs1, rs2: rs1 < rs2),
-            0b111:Branch('BGEU', '>=', lambda hart, rs1, rs2: rs1 >= rs2)
-        },
-        Opcode.LOAD: LOAD(),
-        Opcode.STORE: STORE(),
-        Opcode.OP_IMM:{
-            0b000:RegImmed("ADDI", "+", lambda hart, rs1, imm: rs1 + imm),
-            0b010:RegImmed("SLTI", "(signed(%s)<signed(%s))?1:0",
-                    lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0),
-            0b011:RegImmed("SLTIU", "(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0),
-            0b100:RegImmed("XORI", "^", lambda hart, rs1, imm: rs1 ^ imm),
-            0b110:RegImmed("ORI", "|", lambda hart, rs1, imm: rs1 | imm),
-            0b111:RegImmed("ANDI", "&", lambda hart, rs1, imm: rs1 & imm),
-            0b001:{
-                0b0000000:RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << (imm & 0x1f))
-            },
-            0b101:{
+        "VUTSRQPONMLKJIHGFEDC    ddddd _||_|||":Handler(LUI()),
+        "VUTSRQPONMLKJIHGFEDC    ddddd __|_|||":Handler(AUIPC()),
+        "VUTSRQPONMLKJIHGFEDC    ddddd ||_||||":Handler(JAL()),
+        "BA9876543210  lllll ___ ddddd ||__|||":Handler(JALR()),
+        "CA98765 zzzzz lllll ___ 4321B ||___||":Handler(Branch('BEQ','==',lambda hart, rs1, rs2: rs1 == rs2)),
+        "CA98765 zzzzz lllll __| 4321B ||___||":Handler(Branch('BNE','!=',lambda hart, rs1, rs2: rs1 != rs2)),
+        "CA98765 zzzzz lllll |__ 4321B ||___||":Handler(Branch('BLT','signed(%s)<signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) < hart.signed(rs2))),
+        "CA98765 zzzzz lllll |_| 4321B ||___||":Handler(Branch('BGE','signed(%s)>=signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) >= hart.signed(rs2))),
+        "CA98765 zzzzz lllll ||_ 4321B ||___||":Handler(Branch('BLTU','<',lambda hart, rs1, rs2: rs1 < rs2)),
+        "CA98765 zzzzz lllll ||| 4321B ||___||":Handler(Branch('BGEU','>=',lambda hart, rs1, rs2: rs1 >= rs2)),
+        "BA9876543210  lllll ___ ddddd _____||":Handler(Load('LB',size=1,signed=True)),
+        "BA9876543210  lllll __| ddddd _____||":Handler(Load('LH',size=2,signed=True)),
+        "BA9876543210  lllll _|_ ddddd _____||":Handler(Load('LW',size=4,signed=True)),
+        "BA9876543210  lllll |__ ddddd _____||":Handler(Load('LBU',size=1,signed=False)),
+        "BA9876543210  lllll |_| ddddd _____||":Handler(Load('LHU',size=2,signed=False)),
+        "BA98765 zzzzz lllll ___ 43210 _|___||":Handler(Store('SB',size=1)),
+        "BA98765 zzzzz lllll __| 43210 _|___||":Handler(Store('SH',size=2)),
+        "BA98765 zzzzz lllll _|_ 43210 _|___||":Handler(Store('SW',size=4)),
+        "BA9876543210  lllll ___ ddddd __|__||":Handler(RegImmed("ADDI", "+", lambda hart, rs1, imm: rs1 + imm)),
+        "BA9876543210  lllll _|_ ddddd __|__||":Handler(RegImmed("SLTI", "(signed(%s)<signed(%s))?1:0",lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0)),
+        "BA9876543210  lllll _|| ddddd __|__||":Handler(RegImmed("SLTIU","(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0)),
+        "BA9876543210  lllll |__ ddddd __|__||":Handler(RegImmed("XORI", "^", lambda hart, rs1, imm: rs1 ^ imm)),
+        "BA9876543210  lllll ||_ ddddd __|__||":Handler(RegImmed("ORI", "|", lambda hart, rs1, imm: rs1 | imm)),
+        "BA9876543210  lllll ||| ddddd __|__||":Handler(RegImmed("ANDI", "&", lambda hart, rs1, imm: rs1 & imm)),
+        "_______ 43210 lllll __| ddddd __|__||":Handler(RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << (imm & 0x1f)),sign='+'),
                 # I can never remember whether which of >> or >>> is logical and
                 # which is arithmetic, so I stick a letter in the middle of the
                 # symbol instead.
-                0b0000000:RegImmed("SRLI", ">L>", lambda hart, rs1, imm: rs1 >> (imm & 0x1f)),
-                0b0100000:RegImmed("SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> read_bitfield(imm, 4, 0))
-            }
-        },
-        Opcode.OP:{
-            0b000:{
-                0b0000000:RegReg("ADD", "+", lambda hart, rs1, rs2: rs1 + rs2),
-                0b0100000:RegReg("SUB", "-", lambda hart, rs1, rs2: rs1 - rs2)
-            },
-            0b001:{
-                0b0000000:RegReg("SLL", "<<", lambda hart, rs1, rs2: rs1 << read_bitfield(rs2, 4, 0))
-            },
-            0b010:{
-                0b0000000:RegReg("SLT", "(signed(%s)<signed(%s))?1:0",
-                 lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0)
-            },
-            0b011:{
-                0b0000000:RegReg("SLTU", "(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0)
-            },
-            0b100:{
-                 0b0000000:RegReg("XOR", "^", lambda hart, rs1, rs2: rs1 ^ rs2),
-            },
-            0b101:{
-                 0b0000000:RegReg("SRL", ">L>", lambda hart, rs1, rs2: rs1 >> read_bitfield(rs2, 4, 0)),
-                 0b0100000:RegReg("SRA", ">A>", lambda hart, rs1, rs2: hart.signed(rs1) >> read_bitfield(rs2, 4, 0)),
-            },
-            0b110:{
-                0b0000000:RegReg("OR", "|", lambda hart, rs1, rs2: rs1 | rs2)
-            },
-            0b111:{
-                0b0000000:RegReg("AND", "&", lambda hart, rs1, rs2: rs1 & rs2)
-            }
-        },
-        Opcode.MISC_MEM:{
-            0b000:Nop("FENCE", "Memory Fence")
-        },
-        Opcode.SYSTEM:{
-            0b000:{
-                0b0:SYSTEM("EBREAK", "Break to debugger", "Break to debugger"),
-                0b1:SYSTEM("ECALL", "System call", "System call")
-            }
-        }
+        "_______ 43210 lllll |_| ddddd __|__||":Handler(RegImmed("SRLI", ">L>", lambda hart, rs1, imm: rs1 >> (imm & 0x1f))),
+        "_|_____ 43210 lllll |_| ddddd __|__||":Handler(RegImmed("SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> read_bitfield(imm, 4, 0))),
+        "_______ zzzzz lllll ___ ddddd _||__||":Handler(RegReg("ADD", "+", lambda hart, rs1, rs2: rs1 + rs2)),
+        "_|_____ zzzzz lllll ___ ddddd _||__||":Handler(RegReg("SUB", "-", lambda hart, rs1, rs2: rs1 - rs2)),
+        "_______ zzzzz lllll __| ddddd _||__||":Handler(RegReg("SLL", "<<", lambda hart, rs1, rs2: rs1 << read_bitfield(rs2, 4, 0))),
+        "_______ zzzzz lllll _|_ ddddd _||__||":Handler(RegReg("SLT", "(signed(%s)<signed(%s))?1:0",lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0)),
+        "_______ zzzzz lllll _|| ddddd _||__||":Handler(RegReg("SLTU", "(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0)),
+        "_______ zzzzz lllll |__ ddddd _||__||":Handler(RegReg("XOR", "^", lambda hart, rs1, rs2: rs1 ^ rs2)),
+        "_______ zzzzz lllll |_| ddddd _||__||":Handler(RegReg("SRL", ">L>", lambda hart, rs1, rs2: rs1 >> read_bitfield(rs2, 4, 0))),
+        "_|_____ zzzzz lllll |_| ddddd _||__||":Handler(RegReg("SRA", ">A>", lambda hart, rs1, rs2: hart.signed(rs1) >> read_bitfield(rs2, 4, 0))),
+        "_______ zzzzz lllll ||_ ddddd _||__||":Handler(RegReg("OR", "|", lambda hart, rs1, rs2: rs1 | rs2)),
+        "_______ zzzzz lllll ||| ddddd _||__||":Handler(RegReg("AND", "&", lambda hart, rs1, rs2: rs1 & rs2)),
+        "BA9876543210  lllll ___ ddddd ___||||":Handler(Nop("FENCE", "Memory Fence")),
+        "____________  _____ ___ _____ |||__||":Handler(SYSTEM("EBREAK", "Break to debugger", "Break to debugger")),
+        "___________|  _____ ___ _____ |||__||":Handler(SYSTEM("ECALL", "System call", "System call")),
     }
 
 
