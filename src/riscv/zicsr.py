@@ -152,7 +152,7 @@ class Zicsr(InstructionSet):
             ins_type=ins_type[p.imm]
         print(f"{hart.pc:08x} -- {ins:08x}  {ins_type.disasm(ins,hart.XLEN)}  # {ins_type.formula(ins,hart.XLEN)}")
         ins_type.execute(ins, hart)
-    ins_exec = [None for func3 in range(8)]
+    ins_exec = {func3:None for func3 in range(8)}
     class xRET(InstructionHandler):
         """
         Return to a different privilege level. For now we just
@@ -310,3 +310,5 @@ class Zicsr(InstructionSet):
     ins_exec[0b101]=CSRI("CSRRWI","=",lambda csr,rs1:rs1)
     ins_exec[0b110]=CSRI("CSRRSI","|=",lambda csr,rs1:csr|rs1)
     ins_exec[0b111]=CSRI("CSRRCI","&=~",lambda csr,rs1:csr&~rs1)
+    def get_decode_table(self):
+        return self.ins_exec
