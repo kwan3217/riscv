@@ -168,7 +168,6 @@ class RV32I(InstructionSet):
             val = hart.mem.load(self.size, addr)
             if self.signed:
                 val = signed(val, self.size * 8 - 1)
-            print(f"mem[0x{addr:0{self.size * 2}x}]->0x{val:0{self.size * 2}x}")
             hart.x[p['rd']] = val
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"{self.name} x{p['rs1']:2},x{p['rd']:2},{p['imm']:12}"
@@ -184,7 +183,6 @@ class RV32I(InstructionSet):
             addr += p['imm']
             val=hart.x[p['rs2']]
             hart.mem.store(self.size, addr, val)
-            print(f"mem[0x{addr:0{self.size * 2}x}]<-0x{val:0{self.size * 2}x}")
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"{self.name:7s}x{p['rs1']:2},x{p['rs2']:2},{p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
