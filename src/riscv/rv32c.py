@@ -390,7 +390,7 @@ class RV32C(InstructionSet):
         "+___ 549 876 23 eee __": C_ADDI4SPN(),  # Immediate is specified as zero-extended
         " __| 543 mmm 76 eee __": None,  # C.FLD in C32/64F
         " __| 548 mmm 76 eee __": None,  # C.LQ in C128I
-        "+_|_ 543 mmm 26 eee __": "C.LW",  # Immediate is specified as zero-extended
+        "+_|_ 543 mmm 26 eee __": C_LW(),  # Immediate is specified as zero-extended
         " _|| 543 mmm 26 eee __": None,  # C.FLW in C32F
         " _|| 543 mmm 76 eee __": None,  # C.LD
         " |__ ... ... .. ... __": None,  # Reserved
