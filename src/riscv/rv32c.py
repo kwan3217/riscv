@@ -364,36 +364,30 @@ class RV32C(InstructionSet):
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}{self.symbol}={self.abi_regnames[p['rs2']][self.nameidx]}"
     class C_J(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            p = CJ(ins)
             target = hart.pc
-            target += p['target']
+            target += p['imm']
             target &= bitmask(31, 1)
             hart.pc = target
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            p = CJ(ins)
-            return f"C.J    {p['target']:12}"
+            return f"C.J    {p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p = CJ(ins)
-            if p['target']>0:
-                return f"pc+={p['target']}"
+            if p['imm']>0:
+                return f"pc+={p['imm']}"
             else:
-                return f"pc-={-p['target']}"
+                return f"pc-={-p['imm']}"
     class C_Branch(InstructionHandler):
         def __init__(self, name: str, symbol: str, condition: Callable[[int, int], bool]):
             self.name = name
             self.symbol = symbol
             self.condition = condition
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            p = CB(ins, ((12,12,8),(11,10,3),(6,5,6),(4,3,1),(2,2,5)),hart.XLEN)
             if self.condition(hart.x[p['rs1']], 0):
                 target = hart.pc
                 target += signed(p['imm'], 12)
                 hart.pc = target
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            p = CB(ins, ((12,12,8),(11,10,3),(6,5,6),(4,3,1),(2,2,5)),XLEN)
             return f"{self.name:7s}x{p['rs1']:2},{p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p = CB(ins, ((12,12,8),(11,10,3),(6,5,6),(4,3,1),(2,2,5)),XLEN)
             return f"if {self.abi_regnames[p['rs1']][self.nameidx]}{self.symbol}0 pc=pc{'+' if p['imm'] >= 0 else ''}{p['imm']}"
     def get_decode_table(self):
         return self.ins_exec
@@ -443,9 +437,9 @@ class RV32C(InstructionSet):
         " |__ | || ggg _| yyy _|": None,  # C.ADDW
         " |__ | || ... |_ ... _|": None,  # Reserved
         " |__ | || ... || ... _|": None,  # Reserved
-        " |_| B498A673215 _|": "C.J",
-        " ||_ 843 mmm 76215 _|":"C.BEQZ",
-        " ||| 843 mmm 76215 _|":"C.BNEZ",
+        " |_| B498A673215 _|": C_J(),
+        " ||_ 843 mmm 76215 _|":C_Branch("C.BEQZ","==",lambda a,b:a==b),
+        " ||| 843 mmm 76215 _|":C_Branch("C.BNEZ","!=",lambda a,b:a!=b),
         # Quadrant 2
         "+___ _ fffff 43210 |_": "C.SLLI",  # Bit 12 is nzimm5, which must be 0 for C32I
         " ___ 5 fffff 43210 |_": None,  # C.SLLI on C64/128I, reserved for non-standard extensions on C32I
