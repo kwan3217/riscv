@@ -270,23 +270,14 @@ class RV32C(InstructionSet):
         Execute C.ADDI4SPN.
         """
         def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            p=CIW(ins)
             if p['imm']==0:
                 if p['rd']==0:
-                    raise IllegalInstruction("All zero instruction, permanently illegal")
+                    raise WrongInterpreter("All zero instruction, permanently illegal")
                 raise WrongInterpreter("In C.ADDI4SPN, have a zero immediate")
             hart.x[p['rd']]=hart.x[2]+p['imm']
         def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            p=CIW(ins)
-            if p['imm']==0:
-                if p['rd']==0:
-                    return "C.UNIMP"
             return f"C.ADDI4SPN x{p['rd']:2d},{p['imm']:12d}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p=CIW(ins)
-            if p['imm']==0:
-                if p['rd']==0:
-                    return "C.UNIMP"
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=stackptr+{p['imm']}"
     class C_ADD(InstructionHandler):
         """
@@ -362,52 +353,15 @@ class RV32C(InstructionSet):
             self.symbol = symbol
             self.op = op
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            p = CA(ins)
             result = self.op(hart, hart.x[p['rs1']], hart.x[p['rs2']])
             hart.x[p['rd']] = result
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            p = CA(ins)
             return f"{self.name:7s}x{p['rs1']:2},x{p['rs2']:2}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p = CA(ins)
             if "%s" in self.symbol:
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.symbol % (self.abi_regnames[p['rs1']][self.nameidx], self.abi_regnames[p['rs2']][self.nameidx])}"
             else:
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}{self.symbol}={self.abi_regnames[p['rs2']][self.nameidx]}"
-    decode_100_01_table={
-        #bBA bC  b65
-        0b00:None,
-        0b01:None,
-        0b10:C_ANDI(),
-        0b11:{
-            0b0:{
-                0b00:C_RpRp('C.SUB','-',lambda hart,a,b:a-b),
-                0b01:C_RpRp('C.XOR','^',lambda hart,a,b:a^b),
-                0b10:C_RpRp('C.OR' ,'|',lambda hart,a,b:a|b),
-                0b11:C_RpRp('C.AND','&',lambda hart,a,b:a&b),
-            },
-            0b1:None
-        }
-    }
-    @staticmethod
-    def decode_100_01(ins):
-        bBA=read_bitfield(ins,11,10) # Extract bits 11 (B) and 10 (A)
-        bC =read_bitfield(ins,12,12)
-        b65=read_bitfield(ins, 6, 5)
-        itp=RV32C.decode_100_01_table[bBA]
-        if itp is None:
-            raise WrongInterpreter()
-        elif isinstance(itp,Mapping):
-            itp=itp[bC]
-            if itp is None:
-                raise WrongInterpreter()
-            elif isinstance(itp,Mapping):
-                itp=itp[b65]
-                return itp
-            else:
-                return itp
-        else:
-            return itp
     class C_J(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             p = CJ(ins)
@@ -446,7 +400,7 @@ class RV32C(InstructionSet):
     ins_exec = {
         # Quadrant 0
         " ___ ________ ___ __": "C.UNIM",  # Architecture-defined permanent illegal instruction
-        "+___ 549 876 23 eee __": "C.ADDI4SPN",  # Immediate is specified as zero-extended
+        "+___ 549 876 23 eee __": C_ADDI4SPN(),  # Immediate is specified as zero-extended
         " __| 543 mmm 76 eee __": None,  # C.FLD in C32/64F
         " __| 548 mmm 76 eee __": None,  # C.LQ in C128I
         "+_|_ 543 mmm 26 eee __": "C.LW",  # Immediate is specified as zero-extended
@@ -480,11 +434,11 @@ class RV32C(InstructionSet):
         " |__ _ _| ggg 43210 _|": "C.SRAI",  # Bit 12 is nzimm5, which must be 0 for RV32C
         " |__ 5 _| ggg 43210 _|": None,  # SRAI in C64/128I
         "+|__ _ _| 210 _____ _|": "C.HINT6",  # C.SRAI64 in RV128C
-        " |__ 5 |_ ggg 43210 _|": "C.ANDI",
-        " |__ _ || ggg __ yyy _|": "C.SUB",
-        " |__ _ || ggg _| yyy _|": "C.XOR",
-        " |__ _ || ggg |_ yyy _|": "C.OR",
-        " |__ _ || ggg || yyy _|": "C.AND",
+        " |__ 5 |_ ggg 43210 _|": C_ANDI(),
+        " |__ _ || ggg __ yyy _|": C_RpRp('C.SUB','-',lambda hart,a,b:a-b),
+        " |__ _ || ggg _| yyy _|": C_RpRp('C.XOR','^',lambda hart,a,b:a^b),
+        " |__ _ || ggg |_ yyy _|": C_RpRp('C.OR' ,'|',lambda hart,a,b:a|b),
+        " |__ _ || ggg || yyy _|": C_RpRp('C.AND','&',lambda hart,a,b:a&b),
         " |__ | || ggg __ yyy _|": None,  # C.SUBW
         " |__ | || ggg _| yyy _|": None,  # C.ADDW
         " |__ | || ... |_ ... _|": None,  # Reserved
