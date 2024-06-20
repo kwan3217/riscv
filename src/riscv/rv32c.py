@@ -131,15 +131,21 @@ class RV32C(InstructionSet):
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}&=0x{p['imm']:08x}"
     class C_SWSP(InstructionHandler):
+        """
+        "C.SWSP stores a 32-bit value in register rs2 to memory. It
+        computes an effective address by adding the zero-extended offset,
+        scaled by 4 [scaled by the decoder, so don't do it here], to the
+        stack pointer, x2. It expands to `sw rs2, offset[7:2](x2)`.
+        """
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            addr = hart.x[p['rs1']]  # base
+            addr = hart.x[2]  # base
             addr += p['imm']
             size = 4
             hart.mem.store(size, addr, hart.x[p['rs2']])
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"C.SWSP   x{p['rs2']:2},{p['imm']:15}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"mem[{self.abi_regnames[p['rs1']][self.nameidx]}+{p['imm']}]=b32({self.abi_regnames[p['rs2']][self.nameidx]})"
+            return f"mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p['imm']) if p['imm']!=0 else ''}]=b32({self.abi_regnames[p['rs2']][self.nameidx]})"
     class C_LW(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             size = 4
@@ -203,18 +209,15 @@ class RV32C(InstructionSet):
                 raise WrongInterpreter()
     class C_JAL(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            p = CJ(ins)
             hart.x[1] = hart.pc+2
             target = hart.pc
-            target += p['target']
+            target += p['imm']
             target &= bitmask(31, 1)
             hart.pc = target
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            p = CJ(ins)
-            return f"C.JAL    {p['target']:12}"
+            return f"C.JAL    {p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p = CJ(ins)
-            return f"{self.abi_regnames[1][self.nameidx]}=pc+2, pc=pc{'+' if p['target'] >= 0 else ''}{p['target']}"
+            return f"{self.abi_regnames[1][self.nameidx]}=pc+2, pc=pc{'+' if p['imm'] >= 0 else ''}{p['imm']}"
     class C_LI(InstructionHandler):
         """
         Execute C.LI, as well as C.HINT. The latter is
@@ -299,54 +302,38 @@ class RV32C(InstructionSet):
             return f"C.ADD  x{p['rd']:2d},x{p['rs2']:2d}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}+={self.abi_regnames[p['rs2']][self.nameidx]}"
-    class C_EBREAK_JALR(InstructionHandler):
+    class C_EBREAK(InstructionHandler):
         """
         Execute C.EBREAK, C.JALR, or C.ADD. These all
         have the same opcode and funct bits, so they
         are only distinguishable by their register operands:
-        * C.ADD - rs1/rd!=0, rs2!=0. IE don't use x0 as either
-          a source or a destination. This would be a NOP, so
-          we steal those bits for something else. If rs1/rd==0,
-          this is a hint as it would be a NOP.
         * C.JALR - rs1/rd!=0, rs2==0. If we would source an add
           from x0, then this is a JALR instead
         * C.EBREAK - If this would both source and write to x0,
           then this is an EBREAK instead.
         """
         def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            p = CR(ins)
-            if p['rd']!=0 and p['rs2']!=0:
-                # C.ADD
-                hart.x[p['rd']]=hart.x[p['rs1']]+hart.x[p['rs2']]
-            elif p['rd']==0:
-                pass # Hint, equivalent to NOP
-            elif p['rs2']==0:
-                # C.JALR
-                raise NotImplemented("C.JALR")
-            else:
-                # C.EBREAK
-                raise StopIteration(f"C.EBREAK")
+            raise StopIteration(f"C.EBREAK")
         def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            p=CR(ins)
-            if p['rd']!=0 and p['rs2']!=0:
-                # C.ADD
-                return f"C.ADD  x{p['rd']:2d},x{p['rs2']:2d}"
-            elif p['rd']==0:
-                return "C.HINT"
-            elif p['rs2']==0:
-                return "C.JALR"
-            else:
-                return "C.EBREAK"
+            return "C.EBREAK"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p=CR(ins)
-            if p['rd']!=0 and p['rs2']!=0:
-                return f"{self.abi_regnames[p['rd']][self.nameidx]}+={self.abi_regnames[p['rs2']][self.nameidx]}"
-            elif p['rd']==0:
-                return "C.HINT"
-            elif p['rs2']==0:
-                return "C.JALR"
-            else:
-                return "C.EBREAK"
+            return "Breakpoint"
+    class C_JALR(InstructionHandler):
+        """
+        Execute C.EBREAK, C.JALR, or C.ADD. These all
+        have the same opcode and funct bits, so they
+        are only distinguishable by their register operands:
+        * C.JALR - rs1/rd!=0, rs2==0. If we would source an add
+          from x0, then this is a JALR instead
+        * C.EBREAK - If this would both source and write to x0,
+          then this is an EBREAK instead.
+        """
+        def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
+            raise NotImplemented("C.JALR")
+        def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
+            return "C.JALR"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            return "C.JALR"
     class C_RpRp(InstructionHandler):
         def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
             self.name = name
@@ -413,7 +400,7 @@ class RV32C(InstructionSet):
         " ___ 5 fffff 43210 _|": C_ADDI(),
         # Immediate must be nonzero and is sign-extended. Zero immediate is a hint.
         "+___ _ fffff _____ _|": C_NOP("C.HINT_ADDI imm=0"),
-        " __| B498A673215 _|": "C.JAL",  # Signed offset
+        " __| B498A673215 _|": C_JAL(),  # Signed offset
         # "__| 5 fffff 43210 _|":None, # C.ADDIW in C64/128I
         " _|_ 5 ddddd 43210 _|": C_LI(),
         "+_|_ 5 _____ 43210 _|": C_NOP("C.HINT_LI rd=x0"),
@@ -461,7 +448,7 @@ class RV32C(InstructionSet):
         " |__ | _____ zzzzz |_": C_NOP("C.HINT_ADD rd=x0"),  # Encoding that C.ADD x0,rs2 *would* have
         " |_| 543876 zzzzz |_": None,  # C.FSDSP, CF
         " |_| 549876 zzzzz |_": None,  # C.SQSP, C128I
-        " ||_ 543276 zzzzz |_": "C.SWSP",
+        " ||_ 543276 zzzzz |_": C_SWSP(),
         " ||| 543276 zzzzz |_": None,  # C.FSWSP, C32F
         " ||| 543876 zzzzz |_": None,  # C.SDSP, C64/128F
     }
