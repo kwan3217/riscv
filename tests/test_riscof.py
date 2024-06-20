@@ -133,7 +133,8 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
     :return:
     """
     elffn=f"riscof_work/rv32i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
-    hart = Hart((RV32I(), Zicsr(),RV32C()))
+    #hart = Hart((RV32I(), Zicsr(),RV32C()))
+    hart = Hart((RV32I(), ))
     syms=hart.mem.stuff_elf(elffn)
     hart.halts.add(syms["exit_cleanup"])
     for sym,addr in syms.items():

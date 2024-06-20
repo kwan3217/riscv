@@ -597,6 +597,8 @@ class RV32C(InstructionSet):
         def formula(self, ins: int, XLEN: int):
             p = CB(ins, ((12,12,8),(11,10,3),(6,5,6),(4,3,1),(2,2,5)),XLEN)
             return f"if {self.abi_regnames[p.rs1][self.nameidx]}{self.symbol}0 pc=pc{'+' if p.imm >= 0 else ''}{p.imm}"
+    def get_decode_table(self):
+        return self.ins_exec
     ins_exec={
         0b00:{
             0b000:C_ADDI4SPN(),
