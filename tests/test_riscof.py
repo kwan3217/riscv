@@ -104,16 +104,13 @@ export PATH=$PATH:/full/path/to/riscv-isa-sim
 """
 from glob import glob
 from os.path import basename
-from subprocess import run
 
 import pytest
 
-from elf import read_syms
 from riscv.hart import Hart
 from riscv.rv32c import RV32C
 from riscv.rv32i import RV32I
-from riscv.spike import spike_sig
-from riscv.zicsr import Zicsr
+from riscv.spike import spike_sig, check_sig
 
 
 @pytest.mark.parametrize(
@@ -152,12 +149,5 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000):
     assert cycles<max_cycles,"Hit maximum cycles"
     # Check signature
     sig=spike_sig(elffn)
-    some_bad=False
-    for addr,ref in sig.items():
-        dut=hart.mem.load(4,addr)
-        addrdump=f"addr=0x{addr:08x}, ref=0x{ref:08x}, dut=0x{dut:08x}{'*' if ref!=dut else ''}"
-        print(addrdump)
-        if ref!=dut:
-            some_bad=True
-    assert not some_bad,f"Bad signature"
+    assert check_sig(hart.mem, sig),"Bad signature"
 

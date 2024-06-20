@@ -8,8 +8,10 @@ from typing import Mapping
 
 from elf import read_syms
 
+Signature=Mapping[int,int]
 
-def spike_sig(elffn:str)->Mapping[int,int]:
+
+def spike_sig(elffn:str)->Signature:
     """
     Use spike emulator to run a test case. This will generate
     a signature which can be compared to the signature which
@@ -43,3 +45,14 @@ def spike_sig(elffn:str)->Mapping[int,int]:
     for addr,line in zip(sigaddrs,siglines):
         sig[addr]=int(line[2:10],16)
     return sig
+
+
+def check_sig(mem:'Memory', sig:Signature):
+    some_bad=False
+    for addr,ref in sig.items():
+        dut=mem.load(4,addr)
+        addrdump=f"addr=0x{addr:08x}, ref=0x{ref:08x}, dut=0x{dut:08x}{'*' if ref!=dut else ''}"
+        print(addrdump)
+        if ref!=dut:
+            some_bad=True
+    return not some_bad
