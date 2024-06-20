@@ -100,29 +100,6 @@ class RV32C(InstructionSet):
             return f"{self.name:7s} {p}"
         def formula(self, p: Mapping[str, int], XLEN: int):
             return f"(No operation)"
-    class C_ADDI(InstructionHandler):
-        """
-        Execute C.ADDI
-        """
-        def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            hart.x[p['rd']]=hart.x[p['rs1']]+p['imm']
-        def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            if p['rd']==0:
-                return "C.NOP"
-            elif p['imm']==0:
-                return f"C.HINT   0b{p['rd']:05b}"
-            else:
-                return f"C.ADDI   x{p['rd']:2},x{p['rd']:2},{p['imm']:12}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            if p['rd']==0:
-                return "No operation"
-            elif p['imm']==0:
-                return f"Hint (No operation)"
-            else:
-                if p['imm']>=0:
-                    return f"{self.abi_regnames[p['rd']][self.nameidx]}+={p['imm']}"
-                else:
-                    return f"{self.abi_regnames[p['rd']][self.nameidx]}-={-p['imm']}"
     class C_ANDI(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
             hart.x[p['rd']]=hart.x[p['rs1']]&p['imm']
@@ -171,7 +148,6 @@ class RV32C(InstructionSet):
             return f"b32(mem[{self.abi_regnames[p['rs1']][self.nameidx]}{'+'+str(p['imm']) if p['imm']>0 else ''}])={self.abi_regnames[p['rs2']][self.nameidx]}"
     class C_LWSP(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            p = CI(ins,imm_bitfield=((12,12,5),(6,4,2),(3,2,6)),imm_signed=False)
             size = 4
             addr = hart.x[2]  # base
             addr += p['imm']
@@ -180,10 +156,8 @@ class RV32C(InstructionSet):
             val = signed(val, size * 8 - 1)
             hart.x[p['rd']] = val
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            p = CI(ins,imm_bitfield=((12,12,5),(6,4,2),(3,2,6)),imm_signed=False)
             return f"C.LWSP   x{p['rd']:2},{p['imm']:15}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p = CI(ins,imm_bitfield=((12,12,5),(6,4,2),(3,2,6)),imm_signed=False)
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=i32(mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p['imm']) if p['imm']>0 else ''}])"
     class C_MV(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
@@ -373,7 +347,7 @@ class RV32C(InstructionSet):
         An instruction which acts on a register and an immediate.
         """
 
-        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
+        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int],immfmt:str='d',immprefix:str=''):
             """
             Define a specific instruction
 
@@ -396,6 +370,8 @@ class RV32C(InstructionSet):
             self.name = name
             self.symbol = symbol
             self.op = op
+            self.immfmt=immfmt
+            self.immprefix=immprefix
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             result = self.op(hart, hart.x[p['rs1']], p['imm'])
             hart.x[p['rd']] = result
@@ -404,14 +380,8 @@ class RV32C(InstructionSet):
         def formula(self, p: Mapping[str,int], XLEN: int):
             if p['rs1'] == 0:
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}={p['imm']}"
-            if "ADD" in self.name and p['imm'] < 0:
-                this_symbol = ""
             else:
-                this_symbol = self.symbol
-            if "%s" in self.symbol:
-                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.symbol % (self.abi_regnames[p['rs1']][self.nameidx], p['imm'])}"
-            else:
-                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs1']][self.nameidx]}{this_symbol}{p['imm']}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}{self.symbol}={self.immprefix}{p['imm']:{self.immfmt}}"
     def get_decode_table(self):
         return self.ins_exec
     ins_exec = {
@@ -433,7 +403,7 @@ class RV32C(InstructionSet):
         " ___ _ _____ _____ _|": C_NOP("C.NOP"),
         "+___ 5 _____ 43210 _|": C_NOP("C.HINT_NOP rd=0"),
         # Treat it as unsigned zero-ext because it will be used as a bitfield
-        " ___ 5 fffff 43210 _|": C_ADDI(),
+        " ___ 5 fffff 43210 _|": C_RegImmed("C.ADDI","+",lambda hart,rs1,imm:rs1+imm),
         # Immediate must be nonzero and is sign-extended. Zero immediate is a hint.
         "+___ _ fffff _____ _|": C_NOP("C.HINT_ADDI imm=0"),
         " __| B498A673215 _|": C_JAL(),  # Signed offset
@@ -446,12 +416,12 @@ class RV32C(InstructionSet):
         " _|| _ ddddd _____ _|": None,  # Reserved
         "+_|| 5 _____ 43210 _|": C_NOP("C.HINT_LUI rd=x0"),
         "+|__ _ __ ggg 43210 _|": C_RegImmed("C.SRLI", ">L>", lambda hart, rs1, imm: rs1 >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
-        " |__ 5 __ ggg 43210 _|": None,  # SRLI in C64/128I
+        "+|__ 5 __ ggg 43210 _|": None,  # SRLI in C64/128I
         "+|__ _ __ 210 _____ _|": C_NOP("C.HINT_SRLI 64"),  # C.SRLI64 in RV128C
         "+|__ _ _| ggg 43210 _|": C_RegImmed("C.SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
-        " |__ 5 _| ggg 43210 _|": None,  # SRAI in C64/128I
+        "+|__ 5 _| ggg 43210 _|": None,  # SRAI in C64/128I
         "+|__ _ _| 210 _____ _|": C_NOP("C.HINT_SRAI 64"),  # C.SRAI64 in RV128C
-        " |__ 5 |_ ggg 43210 _|": C_ANDI(),
+        "x|__ 5 |_ ggg 43210 _|": C_RegImmed("C_ANDI","&",lambda hart,rs1,imm:rs1 & imm,immfmt='08x',immprefix='0x'),
         " |__ _ || ggg __ yyy _|": C_RpRp('C.SUB','-',lambda hart,a,b:a-b),
         " |__ _ || ggg _| yyy _|": C_RpRp('C.XOR','^',lambda hart,a,b:a^b),
         " |__ _ || ggg |_ yyy _|": C_RpRp('C.OR' ,'|',lambda hart,a,b:a|b),
@@ -469,17 +439,17 @@ class RV32C(InstructionSet):
         "+___ _ fffff _____ |_": C_NOP("C.HINT_SLLI 64"),  # C.SLLI rd,64 on C128I, hint on C32/64I
         " __| 5 ddddd 43876 |_": None,  # C.FLDSP, C32/64F
         " __| 5 ddddd 49876 |_": None,  # C.LQSP, C128I
-        "+_|_ 5 ddddd 43276 |_": "C.LWSP",
+        "+_|_ 5 ddddd 43276 |_": C_LWSP(),
         " _|_ 5 _____ 43276 |_": None,  # Reserved, equivalent to C.LWSP x0,imm
         " _|| 5 ddddd 43276 |_": None,  # C.FLWSP
         " _|| 5 ddddd 43876 |_": None,  # C.LDSP, C64/128I
         " _|| 5 _____ 43876 |_": None,  # Reserved, equivalent to C.LDSP x0,imm
-        " |__ _ lllll _____ |_": "C.JR",  # Encoding that C.MV rd=x0 *would* have
+        " |__ _ lllll _____ |_": C_JR(),  # Encoding that C.MV rd=x0 *would* have
         " |__ _ _____ _____ |_": None,  # Reserved, equivalent to C.JR x0
         " |__ _ ddddd zzzzz |_": C_MV(),
         " |__ _ _____ zzzzz |_": C_NOP("C.HINT_MV rd=x0"),  # Equivalent to C.MV x0=rs2
-        " |__ | _____ _____ |_": "C.EBREAK",  # Encoding that C.ADD x0,x0 *would* have
-        " |__ | lllll _____ |_": "C.JALR",  # Encoding that C.ADD rs1/rd,x0 *would* have
+        " |__ | _____ _____ |_": C_EBREAK(),  # Encoding that C.ADD x0,x0 *would* have
+        " |__ | lllll _____ |_": C_JALR(),  # Encoding that C.ADD rs1/rd,x0 *would* have
         " |__ | fffff zzzzz |_": C_ADD(),
         " |__ | _____ zzzzz |_": C_NOP("C.HINT_ADD rd=x0"),  # Encoding that C.ADD x0,rs2 *would* have
         " |_| 543876 zzzzz |_": None,  # C.FSDSP, CF

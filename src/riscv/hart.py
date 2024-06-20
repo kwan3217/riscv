@@ -13,7 +13,7 @@ from riscv.memory import Memory
 
 def main():
     from test_riscof import test_riscof
-    test_riscof("C","cslli")
+    test_riscof("C","candi")
 
 
 if __name__ == "__main__":
