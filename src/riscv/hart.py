@@ -13,7 +13,7 @@ from riscv.memory import Memory
 
 def main():
     from test_riscof import test_riscof
-    test_riscof("C","cmv")
+    test_riscof("C","cjalr")
 
 
 if __name__ == "__main__":
@@ -303,7 +303,7 @@ class Hart:
         if handler is not None:
             if type(handler) is str:
                 raise ValueError(f"Unimplemented instruction {handler}")
-            print(f"{self.pc:08x} -- {ins:04x}      {handler.disasm(fields, self.XLEN)}  # {handler.formula(fields, self.XLEN)}")
+            print(f"{self.pc:08x} -- {ins:0{length*2}x}      {handler.disasm(fields, self.XLEN)}  # {handler.formula(fields, self.XLEN)}")
             handler.execute(fields,self)
             if not self._pc_changed:
                 self.pc += length

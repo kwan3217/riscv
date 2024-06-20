@@ -285,21 +285,16 @@ class RV32C(InstructionSet):
         def formula(self, p: Mapping[str,int], XLEN: int):
             return "Breakpoint"
     class C_JALR(InstructionHandler):
-        """
-        Execute C.EBREAK, C.JALR, or C.ADD. These all
-        have the same opcode and funct bits, so they
-        are only distinguishable by their register operands:
-        * C.JALR - rs1/rd!=0, rs2==0. If we would source an add
-          from x0, then this is a JALR instead
-        * C.EBREAK - If this would both source and write to x0,
-          then this is an EBREAK instead.
-        """
-        def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            raise NotImplemented("C.JALR")
-        def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            return "C.JALR"
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            # Make sure to do a swap in case rs1=x1
+            saveaddr=hart.pc+2
+            newpc=hart.x[p['rs1']]
+            hart.x[1] = saveaddr
+            hart.pc=newpc
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"C.JALR   {p['rs1']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            return "C.JALR"
+            return f"{self.abi_regnames[1][self.nameidx]}=pc+2, pc={self.abi_regnames[p['rs1']][self.nameidx]}"
     class C_RpRp(InstructionHandler):
         def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
             self.name = name
