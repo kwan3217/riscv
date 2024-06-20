@@ -124,13 +124,6 @@ class RV32C(InstructionSet):
                 else:
                     return f"{self.abi_regnames[p['rd']][self.nameidx]}-={-p['imm']}"
     class C_ANDI(InstructionHandler):
-        """
-        Execute C.ANDI, as well as C.NOP and C.HINT. The latter two
-        are implemented by adding immediate 0 to a particular register.
-        Since this is the right action for NOP, and since our emulator
-        doesn't care about performance and therefore ignores hints,
-        it is OK to interpret these as normal add-of-0.
-        """
         def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
             hart.x[p['rd']]=hart.x[p['rs1']]&p['imm']
         def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
@@ -138,9 +131,6 @@ class RV32C(InstructionSet):
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}&=0x{p['imm']:08x}"
     class C_SWSP(InstructionHandler):
-        """
-        Execute C.SWSP
-        """
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             addr = hart.x[p['rs1']]  # base
             addr += p['imm']
@@ -260,45 +250,21 @@ class RV32C(InstructionSet):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}={p['imm']}"
     class C_ADDI16SP(InstructionHandler):
         """
-        Execute C.LUI and C.ADDI16SP. C.LUI has rd!=2, while
-        C.ADDI16SP has rd==2. The bit order of the constants is
-        different between the two instructions.
+        Execute C.ADDI16SP. Add immediate to Stack Pointer. I16 means
+           multiply the immediate by 16 before adding, but the decoder
+           already does this for us.
         """
         def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            p=CI(ins,imm_signed=True,imm_bitfield=((12,12,17),(6,2,12)))
-            if p['rd']!=0 and p['rd']!=2:
-                # C.LUI
-                hart.x[p['rd']]=p['imm']
-            elif p['rd']==2:
-                # C.ADDI16SP - Add 16*immediate to Stack Pointer. Note
-                # that the specified bitfield for the non-zero immediate
-                # actually already does the *16, since the lowest bit
-                # specified is bit 4 of the immediate.
-                p=CI(ins,imm_signed=True,imm_bitfield=((12,12,9),(6,6,4),(5,5,6),(4,3,7),(2,2,5)))
-                if p['imm']==0:
-                    raise WrongInterpreter("In C.ADDI16SP, have a zero immediate")
-                hart.x[2]+=p['imm']
+            if p['imm']==0:
+                raise WrongInterpreter("In C.ADDI16SP, have a zero immediate")
+            hart.x[2]+=p['imm']
         def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            p=CI(ins,imm_signed=True,imm_bitfield=((12,12,17),(6,2,12)))
-            if p['rd']!=0 and p['rd']!=2:
-                # C.LUI
-                return f"C.LUI   x{p['rd']:2},{p['imm']:12d}"
-            elif p['rd']==2:
-                # C.ADDI16SP
-                p=CI(ins,imm_signed=True,imm_bitfield=((12,12,9),(6,6,4),(5,5,6),(4,3,7),(2,2,5)))
-                return f"C.ADDI16SP {p['imm']:12d}"
+            return f"C.ADDI16SP {p['imm']:12d}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p=CI(ins,imm_signed=True,imm_bitfield=((12,12,17),(6,2,12)))
-            if p['rd']!=0 and p['rd']!=2:
-                # C.LUI
-                return f"{self.abi_regnames[p['rd']][self.nameidx]}={p['imm']}"
-            elif p['rd']==2:
-                # C.ADDI16SP
-                p=CI(ins,imm_signed=True,imm_bitfield=((12,12,9),(6,6,4),(5,5,6),(4,3,7),(2,2,5)))
-                if p['imm']>=0:
-                    return f"{self.abi_regnames[2][self.nameidx]}+={p['imm']}"
-                else:
-                    return f"{self.abi_regnames[2][self.nameidx]}-={-p['imm']}"
+            if p['imm']>=0:
+                return f"{self.abi_regnames[2][self.nameidx]}+={p['imm']}"
+            else:
+                return f"{self.abi_regnames[2][self.nameidx]}-={-p['imm']}"
     class C_ADDI4SPN(InstructionHandler):
         """
         Execute C.ADDI4SPN.
@@ -502,8 +468,8 @@ class RV32C(InstructionSet):
         " __| B498A673215 _|": "C.JAL",  # Signed offset
         # "__| 5 fffff 43210 _|":None, # C.ADDIW in C64/128I
         " _|_ 5 ddddd 43210 _|": C_LI(),
-        "+_|_ 5 _____ 43210 _|": "C.HINT3",
-        " _|| 9 ___|_ 46875 _|": "C.ADDI16SP",  # Nonzero sign-extended. Zero immediate is reserved.
+        "+_|_ 5 _____ 43210 _|": C_NOP("C.HINT_LI rd=x0"),
+        " _|| 9 ___|_ 46875 _|": C_ADDI16SP(),  # Nonzero sign-extended. Zero immediate is reserved.
         " _|| _ ___|_ _____ _|": None,  # Reserved for future standard extensions, equivalent to C.ADDI16SP 0
         " _|| H ddddd GFEDC _|": C_LUI(),
         " _|| _ ddddd _____ _|": None,  # Reserved
