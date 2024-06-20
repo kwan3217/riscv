@@ -185,28 +185,20 @@ class RV32C(InstructionSet):
         def formula(self, p: Mapping[str,int], XLEN: int):
             p = CI(ins,imm_bitfield=((12,12,5),(6,4,2),(3,2,6)),imm_signed=False)
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=i32(mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p['imm']) if p['imm']>0 else ''}])"
-    class C_JR_MV(InstructionHandler):
+    class C_MV(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            p = CR(ins)
-            if p['rs2']!=0 and p['rd']!=0:
-                # C.MV
-                hart.x[p['rd']]=hart.x[p['rs2']]
-            else:
-                raise WrongInterpreter()
+            hart.x[p['rd']]=hart.x[p['rs2']]
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            p = CR(ins)
-            if p['rs2']!=0 and p['rd']!=0:
-                # C.MV
-                return f"C.MV    x{p['rd']:2},x{p['rs2']:2}"
-            else:
-                raise WrongInterpreter()
+            return f"C.MV    x{p['rd']:2},x{p['rs2']:2}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            p = CR(ins)
-            if p['rs2']!=0 and p['rd']!=0:
-                # C.MV
-                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs2']][self.nameidx]}"
-            else:
-                raise WrongInterpreter()
+            return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs2']][self.nameidx]}"
+    class C_JR(InstructionHandler):
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            raise NotImplemented()
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            raise NotImplemented()
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            raise NotImplemented()
     class C_JAL(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             hart.x[1] = hart.pc+2
@@ -376,6 +368,50 @@ class RV32C(InstructionSet):
             return f"{self.name:7s}x{p['rs1']:2},{p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"if {self.abi_regnames[p['rs1']][self.nameidx]}{self.symbol}0 pc=pc{'+' if p['imm'] >= 0 else ''}{p['imm']}"
+    class C_RegImmed(InstructionHandler):
+        """
+        An instruction which acts on a register and an immediate.
+        """
+
+        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
+            """
+            Define a specific instruction
+
+            :param name: Name, following the RISC-V book for the canonical name of this
+                         instruction in all uppercase
+            :param symbol: Symbol of this instruction, approximating the symbol that would
+                           be used in C/C++ to describe the same operation. If the symbol
+                           does *not* have the substring %s, it is considered to be an infix
+                           operator such as `+`. If it *does* have the substring %s, then it
+                           is considered to be a complete expression, and must have exactly
+                           two %s placeholders. An example is `(signed(%s)<signed(%s))?1:0` for
+                           SLTI.
+            :param op: Callable which is handed two integer operands and returns the result
+                       of the operation. It's often convenient to use a lambda here. It is
+                       passed the hart in question, but that is usually just used to get the
+                       current XLEN. Note that it is passed *values*, not register references.
+                       The values are passed as unsigned integers, but can be converted to
+                       signed using the XLEN from the hart.
+            """
+            self.name = name
+            self.symbol = symbol
+            self.op = op
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            result = self.op(hart, hart.x[p['rs1']], p['imm'])
+            hart.x[p['rd']] = result
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.name:7s}x{p['rd']:2},x{p['rs1']:2},{p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            if p['rs1'] == 0:
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={p['imm']}"
+            if "ADD" in self.name and p['imm'] < 0:
+                this_symbol = ""
+            else:
+                this_symbol = self.symbol
+            if "%s" in self.symbol:
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.symbol % (self.abi_regnames[p['rs1']][self.nameidx], p['imm'])}"
+            else:
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs1']][self.nameidx]}{this_symbol}{p['imm']}"
     def get_decode_table(self):
         return self.ins_exec
     ins_exec = {
@@ -408,13 +444,13 @@ class RV32C(InstructionSet):
         " _|| _ ___|_ _____ _|": None,  # Reserved for future standard extensions, equivalent to C.ADDI16SP 0
         " _|| H ddddd GFEDC _|": C_LUI(),
         " _|| _ ddddd _____ _|": None,  # Reserved
-        "+_|| 5 _____ 43210 _|": "C.HINT4",
-        " |__ _ __ ggg 43210 _|": "C.SRLI",  # Bit 12 is nzimm5, which must be 0 for RV32C
+        "+_|| 5 _____ 43210 _|": C_NOP("C.HINT_LUI rd=x0"),
+        "+|__ _ __ ggg 43210 _|": C_RegImmed("C.SRLI", ">L>", lambda hart, rs1, imm: rs1 >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
         " |__ 5 __ ggg 43210 _|": None,  # SRLI in C64/128I
-        "+|__ _ __ 210 _____ _|": "C.HINT5",  # C.SRLI64 in RV128C
-        " |__ _ _| ggg 43210 _|": "C.SRAI",  # Bit 12 is nzimm5, which must be 0 for RV32C
+        "+|__ _ __ 210 _____ _|": C_NOP("C.HINT_SRLI 64"),  # C.SRLI64 in RV128C
+        "+|__ _ _| ggg 43210 _|": C_RegImmed("C.SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
         " |__ 5 _| ggg 43210 _|": None,  # SRAI in C64/128I
-        "+|__ _ _| 210 _____ _|": "C.HINT6",  # C.SRAI64 in RV128C
+        "+|__ _ _| 210 _____ _|": C_NOP("C.HINT_SRAI 64"),  # C.SRAI64 in RV128C
         " |__ 5 |_ ggg 43210 _|": C_ANDI(),
         " |__ _ || ggg __ yyy _|": C_RpRp('C.SUB','-',lambda hart,a,b:a-b),
         " |__ _ || ggg _| yyy _|": C_RpRp('C.XOR','^',lambda hart,a,b:a^b),
@@ -428,9 +464,9 @@ class RV32C(InstructionSet):
         " ||_ 843 mmm 76215 _|":C_Branch("C.BEQZ","==",lambda a,b:a==b),
         " ||| 843 mmm 76215 _|":C_Branch("C.BNEZ","!=",lambda a,b:a!=b),
         # Quadrant 2
-        "+___ _ fffff 43210 |_": "C.SLLI",  # Bit 12 is nzimm5, which must be 0 for C32I
+        "+___ _ fffff 43210 |_": C_RegImmed("C.SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),  # Bit 12 is nzimm5, which must be 0 for C32I
         " ___ 5 fffff 43210 |_": None,  # C.SLLI on C64/128I, reserved for non-standard extensions on C32I
-        "+___ _ fffff _____ |_": "C.HINT7",  # C.SLLI rd,64 on C128I, hint on C32/64I
+        "+___ _ fffff _____ |_": C_NOP("C.HINT_SLLI 64"),  # C.SLLI rd,64 on C128I, hint on C32/64I
         " __| 5 ddddd 43876 |_": None,  # C.FLDSP, C32/64F
         " __| 5 ddddd 49876 |_": None,  # C.LQSP, C128I
         "+_|_ 5 ddddd 43276 |_": "C.LWSP",
@@ -440,8 +476,8 @@ class RV32C(InstructionSet):
         " _|| 5 _____ 43876 |_": None,  # Reserved, equivalent to C.LDSP x0,imm
         " |__ _ lllll _____ |_": "C.JR",  # Encoding that C.MV rd=x0 *would* have
         " |__ _ _____ _____ |_": None,  # Reserved, equivalent to C.JR x0
-        " |__ _ ddddd zzzzz |_": "C.MV",
-        " |__ _ _____ zzzzz |_": "C.HINT8",  # Equivalent to C.MV x0=rs2
+        " |__ _ ddddd zzzzz |_": C_MV(),
+        " |__ _ _____ zzzzz |_": C_NOP("C.HINT_MV rd=x0"),  # Equivalent to C.MV x0=rs2
         " |__ | _____ _____ |_": "C.EBREAK",  # Encoding that C.ADD x0,x0 *would* have
         " |__ | lllll _____ |_": "C.JALR",  # Encoding that C.ADD rs1/rd,x0 *would* have
         " |__ | fffff zzzzz |_": C_ADD(),
