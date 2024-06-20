@@ -36,7 +36,8 @@ from warnings import warn
 
 from riscv.bits import read_bitfields
 
-Handler=namedtuple('Handler','name sign',defaults=(None,'-'))
+compiled_encoding=namedtuple('compiled_encoding','mask fields sign_ext signed')
+compiled_handler=namedtuple('compiled_handler','handler fields sign_ext signed')
 
 field_abbrev = {
     'rd': 'd',
@@ -66,7 +67,7 @@ class compiled_encoding_bitmask:
         self.c=c
         self.s=s
     def __str__(self):
-        result=['.']*16
+        result=['.']*32
         for mask,c in zip([self.c,self.s],['0','1']):
             for i in range(16):
                 if (mask & (1<<i))>0:
@@ -91,7 +92,28 @@ def get_mask(encoding:str,bit:str)->int:
     return mask
 
 
-def compile_encoding(human_encoding:str)->tuple[compiled_encoding_bitmask,bitfields_desc]:
+def get_encoding_sign(human_encoding: str):
+    if human_encoding[0] == 'x':
+        sign_ext = True
+        signed = False
+        human_encoding = human_encoding[1:]
+    elif human_encoding[0] == '+':
+        sign_ext = False
+        signed = False
+        human_encoding = human_encoding[1:]
+    elif human_encoding[0] == '-':
+        sign_ext = True
+        signed = True
+        human_encoding = human_encoding[1:]
+    else:
+        # Default case is to sign-extend immediates and treat them as signed
+        sign_ext = True
+        signed = True
+    return human_encoding, sign_ext, signed
+
+
+def compile_encoding(human_encoding:str)->tuple[compiled_encoding_bitmask,bitfields_desc,bool,bool]:
+    human_encoding,sign_ext,signed=get_encoding_sign(human_encoding)
     encoding=reverse_encoding(human_encoding)
     clearb=get_mask(encoding,'_')
     setb=get_mask(encoding,'|')
@@ -118,106 +140,23 @@ def compile_encoding(human_encoding:str)->tuple[compiled_encoding_bitmask,bitfie
             imm_subfields.append((ins_bit,ins_bit,imm_bit))
     if len(imm_subfields)>0:
         fields['imm']=tuple(imm_subfields)
-    return compiled_encoding_bitmask(clearb,setb),fields
+    return compiled_encoding(mask=compiled_encoding_bitmask(clearb,setb),fields=fields,signed=signed,sign_ext=sign_ext)
+
+
+def compile_encodings(human_encodings):
+    result={}
+    for human_encoding, handler in human_encodings.items():
+        clearset, fields, sign_ext, signed = compile_encoding(human_encoding)
+        if clearset in result:
+            if result[clearset][1] is not None:
+                # Otherwise we are just replacing a reserved
+                warn(f"Duplicate clearset {clearset}-- old={result[clearset]}, new={(fields, handler)}")
+        result[clearset] = compiled_handler(fields=fields, sign_ext=sign_ext,signed=signed, handler=handler)
+    return result
 
 
 def reverse_encoding(human_encoding:str)->str:
     return "".join(human_encoding.split(" "))[::-1]
-
-
-# Instructions in the RV32CI instruction set, those
-# instructions that encode in the RV32I instruction
-# set. This excludes:
-#  * Floating point stuff
-#  * Instructions which are not valid in RV32
-# Reserved and Non-Standard extensions are defined as None,
-# since they are usually more specific. The outer code
-# will interpret finding a None as WrongExtension and
-# look in the next one.
-C32I_encodings={
-    # Quadrant 0
-    "___ ________ ___ __":"C.UNIM",  # Architecture-defined permanent illegal instruction
-    "___ 549 876 23 eee __":Handler(name="C.ADDI4SPN",sign='+'), # Immediate is specified as zero-extended
-    "__| 543 mmm 76 eee __":None, # C.FLD in C32/64F
-    "__| 548 mmm 76 eee __":None, # C.LQ in C128I
-    "_|_ 543 mmm 26 eee __":Handler(name="C.LW",sign='+'), # Immediate is specified as zero-extended
-    "_|| 543 mmm 26 eee __":None,  # C.FLW in C32F
-    "_|| 543 mmm 76 eee __":None,  # C.LD
-    "|__ ... ... .. ... __":None,  # Reserved
-    "|_| 543 mmm 76 yyy __":None,  # C.FSD in C32/64F
-    "|_| 548 mmm 76 yyy __":None,  # C.SQ in C128I
-    "||_ 543 mmm 26 yyy __":Handler(name="C.SW",sign='+'), # Likewise
-    "||| 543 mmm 26 yyy __":None,  # C.FSW
-    "||| 543 mmm 76 yyy __":None,  # C.SD
-    # Quadrant 1
-    "___ _ _____ _____ _|":"C.NOP",
-    "___ 5 _____ 43210 _|":Handler(name="C.HINT1",sign='+'), #Treat it as unsigned zero-ext because it will be used as a bitfield
-    "___ 5 fffff 43210 _|":Handler(name="C.ADDI"),  #Immediate must be nonzero and is sign-extended. Zero immediate is a hint.
-    "___ _ 43210 _____ _|":Handler(name="C.HINT2",sign='+'),
-    "__| B498A673215 _|":Handler(name="C.JAL"),     # Signed offset
-    #"__| 5 fffff 43210 _|":None, # C.ADDIW in C64/128I
-    "_|_ 5 ddddd 43210 _|":"C.LI",
-    "_|_ 5 _____ 43210 _|":Handler("C.HINT3",sign='+'),
-    "_|| 9 ___|_ 46875 _|":Handler("C.ADDI16SP"), #Nonzero sign-extended. Zero immediate is reserved.
-    "_|| _ ___|_ _____ _|":None, # Reserved for future standard extensions, equivalent to C.ADDI16SP 0
-    "_|| H ddddd GFEDC _|":Handler("C.LUI"),
-    "_|| _ ddddd _____ _|":None, # Reserved
-    "_|| 5 _____ 43210 _|":Handler(name="C.HINT4",sign='+'),
-    "|__ _ __ ggg 43210 _|":"C.SRLI", # Bit 12 is nzimm5, which must be 0 for RV32C
-    "|__ 5 __ ggg 43210 _|":None, #SRLI in C64/128I
-    "|__ _ __ 210 _____ _|":Handler(name="C.HINT5",sign='+'), #C.SRLI64 in RV128C
-    "|__ _ _| ggg 43210 _|":"C.SRAI", # Bit 12 is nzimm5, which must be 0 for RV32C
-    "|__ 5 _| ggg 43210 _|":None,     # SRAI in C64/128I
-    "|__ _ _| 210 _____ _|":Handler(name="C.HINT6",sign='+'),  # C.SRAI64 in RV128C
-    "|__ 5 |_ ggg 43210 _|":Handler("C.ANDI"),
-    "|__ _ || ggg __ yyy _|":Handler("C.SUB"),
-    "|__ _ || ggg _| yyy _|":Handler("C.XOR"),
-    "|__ _ || ggg |_ yyy _|":Handler("C.OR"),
-    "|__ _ || ggg || yyy _|":Handler("C.AND"),
-    "|__ | || ggg __ yyy _|":None, # C.SUBW
-    "|__ | || ggg _| yyy _|":None, # C.ADDW
-    "|__ | || ... |_ ... _|":None, # Reserved
-    "|__ | || ... || ... _|":None, # Reserved
-    "|_| B498A673215 _|":"C.J",
-    "||_ 843 mmm 76215 _|":Handler(name="C.BEQZ"),
-    "||| 843 mmm 76215 _|":Handler(name="C.BNEZ"),
-    # Quadrant 2
-    "___ _ fffff 43210 |_":Handler("C.SLLI",sign='+'), # Bit 12 is nzimm5, which must be 0 for C32I
-    "___ 5 fffff 43210 |_":None, # C.SLLI on C64/128I, reserved for non-standard extensions on C32I
-    "___ _ fffff _____ |_":Handler("C.HINT7",sign='+'), # C.SLLI rd,64 on C128I, hint on C32/64I
-    "__| 5 ddddd 43876 |_":None, # C.FLDSP, C32/64F
-    "__| 5 ddddd 49876 |_":None, # C.LQSP, C128I
-    "_|_ 5 ddddd 43276 |_":Handler("C.LWSP",sign='+'),
-    "_|_ 5 _____ 43276 |_":None, # Reserved, equivalent to C.LWSP x0,imm
-    "_|| 5 ddddd 43276 |_":None, # C.FLWSP
-    "_|| 5 ddddd 43876 |_":None, # C.LDSP, C64/128I
-    "_|| 5 _____ 43876 |_":None, # Reserved, equivalent to C.LDSP x0,imm
-    "|__ _ lllll _____ |_":Handler("C.JR"),  # Encoding that C.MV rd=x0 *would* have
-    "|__ _ _____ _____ |_":None, # Reserved, equivalent to C.JR x0
-    "|__ _ ddddd zzzzz |_":Handler("C.MV"),
-    "|__ _ _____ zzzzz |_":Handler("C.HINT8"), # Equivalent to C.MV x0=rs2
-    "|__ | _____ _____ |_":Handler("C.EBREAK"), # Encoding that C.ADD x0,x0 *would* have
-    "|__ | lllll _____ |_":Handler("C.JALR"), # Encoding that C.ADD rs1/rd,x0 *would* have
-    "|__ | fffff zzzzz |_":Handler("C.ADD"),
-    "|__ | _____ zzzzz |_":Handler("C.HINT9"), # Encoding that C.ADD x0,rs2 *would* have
-    "|_| 543876 zzzzz |_":None, # C.FSDSP, CF
-    "|_| 549876 zzzzz |_":None, # C.SQSP, C128I
-    "||_ 543276 zzzzz |_":Handler("C.SWSP"),
-    "||| 543276 zzzzz |_":None, # C.FSWSP, C32F
-    "||| 543876 zzzzz |_":None, # C.SDSP, C64/128F
-}
-
-C_encodings={}
-C_encodings.update(C32I_encodings)
-
-C_compiled_encodings={}
-for human_encoding,handler in C_encodings.items():
-    clearset,fields=compile_encoding(human_encoding)
-    if clearset in C_compiled_encodings:
-        if C_compiled_encodings[clearset][1] is not None:
-            # Otherwise we are just replacing a reserved
-            warn(f"Duplicate clearset {clearset}-- old={C_compiled_encodings[clearset]}, new={(fields,handler)}")
-    C_compiled_encodings[clearset]=(fields,handler)
 
 
 def decide(ins:int,compiled_descs:compiled_encodings)->compiled_encoding_bitmask:
@@ -247,36 +186,19 @@ def decode(ins:int,compiled_descs:compiled_encodings,XLEN:int=32)->tuple[Mapping
     :return:
     """
     mask=decide(ins,compiled_descs)
+    if mask is None:
+        from riscv.hart import WrongInterpreter
+        raise WrongInterpreter(f"Mask for instruction 0x{ins:08x} not found")
     desc=compiled_descs[mask]
     fields={}
-    sign='-'
-    if isinstance(desc[1],Handler):
-        sign=desc[1].sign
-    if sign=='-':
-        # Don't bother with sign-extending to XLEN, just flip it to Python negative.
-        sign_ext=False
-        signed=True
-    elif sign=='+':
-        # It's unsigned and zero-extended
-        sign_ext=False
-        signed=False
-    elif sign=='x':
-        # It's sign-extended but then treated as positive
-        sign_ext=True
-        signed=False
-        # The other case, signed and sign-extended, is redundant since
-        # Python doesn't use twos complement for integers (or maybe uses
-        # a form of unlimited-length twos-complement).
-    else:
-        raise ValueError(sign)
-    for name,subfields in desc[0].items():
+    for name,subfields in desc.fields.items():
         if name=="imm":
-            fields[name]=read_bitfields(ins,subfields,XLEN=XLEN if sign_ext else None,is_signed=signed)
+            fields[name]=read_bitfields(ins,subfields,XLEN=XLEN if desc.sign_ext else None,is_signed=desc.signed)
         elif "'" in name:
             fields[name[:-1]]=read_bitfields(ins,subfields,is_signed=False)+8
         else:
             fields[name]=read_bitfields(ins,subfields,is_signed=False)
-    return fields,desc[1]
+    return fields,desc.handler
 
 
 def main():

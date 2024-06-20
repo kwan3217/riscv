@@ -4,9 +4,10 @@ Describe purpose of this script here
 Created: 6/12/24
 """
 from enum import Enum
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from riscv.bits import bitmask, read_bitfield, sign_extend, signed
+from riscv.decode import compile_encodings, decode
 from riscv.memory import Memory
 
 
@@ -153,12 +154,14 @@ class InstructionHandler:
     """
     This class represents code which interprets an instruction.
     """
-    def execute(self, ins:int, hart: 'Hart')->None:
+    def execute(self, p: Mapping[str,int], hart: 'Hart')->None:
         """
         Execute an instruction by computing how it changes a hart's state
         and then making that change to the given hart.
 
-        :param ins: Coded instruction, in a single (unsigned) integer.
+        :param p: Variable fields of the instruction, such as rs1, rd, imm,
+                  etc. Bits which are purely needed to decode the instruction
+                  such as opcode have already been used, and are not included.
         :param hart: Hart to affect
         :raises: ValueError if the passed instruction isn't really handled
                  by this handler. Sometimes a table-driven instruction decoder
@@ -168,7 +171,7 @@ class InstructionHandler:
                  it should go on to the next one etc.
         """
         raise NotImplementedError()
-    def disasm(self, ins: int, XLEN: int)->str:
+    def disasm(self, p: Mapping[str,int], XLEN: int)->str:
         """
         Disassemble an instruction into one assembly-language statement
 
@@ -178,7 +181,7 @@ class InstructionHandler:
                  with the GCC assembler.
         """
         raise NotImplementedError()
-    def formula(self, ins: int, XLEN: int):
+    def formula(self, p: Mapping[str,int], XLEN: int):
         """
         Disassemble an instruction into a line of C-like code. This is
         easier for a human to interpret since we don't have to remember
@@ -248,9 +251,12 @@ class Hart:
         self._pc=0
         self._pc_changed=False
         self.x=Regfile(XLEN=XLEN)
-        self.ext={}
+        self.decode_table={}
         for ext in self.exts:
+            ext_decode_table=ext.get_decode_table()
+            self.decode_table.update(ext_decode_table)
             ext.add_state(self)
+        self.decode_table=compile_encodings(self.decode_table)
     def sign_extend(self,v,bit):
         return sign_extend(v, bit, self.XLEN)
     def signed(self,v):
@@ -287,30 +293,25 @@ class Hart:
             # but it is not considered frozen and no instructions use it.
             raise IllegalInstruction("Instruction is longer than 32-bits, spec is not frozen")
     def exec_one(self):
-        length,ins=self.fetch()
-        handled=False
         self._pc_changed=False
         if self.pc in self.breakpoints:
             print(f"Breakpoint at pc=0x{self.pc:08x}")
         if self.pc in self.halts:
             raise StopIteration(f"Hit halt at pc=0x{self.pc:08x}")
-        for i,ext in enumerate(self.exts):
-            try:
-                ext.interpret(self,ins)
-                handled=True
-                break
-            except WrongInterpreter:
-                continue
-        if not handled:
-            if read_bitfield(ins, 1, 0)==0b11:
-                from riscv.rv32i import I
-                raise ValueError(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")
-            else:
-                raise ValueError(f"At pc=0x{self.pc:08x}, unhandled compressed instruction "
-                                 f"0b{read_bitfield(ins, 15, 13):03b}_{read_bitfield(ins, 12, 12):01b}_{read_bitfield(ins, 11, 7):05b}_{read_bitfield(ins, 6, 2):05b}_{read_bitfield(ins, 1, 0):02b}")
-        else:
+        length,ins=self.fetch()
+        fields,handler=decode(ins, self.decode_table)
+        if handler is not None:
+            print(f"{self.pc:08x} -- {ins:04x}      {handler.disasm(fields, self.XLEN)}  # {handler.formula(fields, self.XLEN)}")
+            handler.execute(fields,self)
             if not self._pc_changed:
                 self.pc += length
+        else:
+            if read_bitfield(ins, 1, 0)==0b11:
+                from riscv.rv32i import I
+                raise IllegalInstruction(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")
+            else:
+                raise IllegalInstruction(f"At pc=0x{self.pc:08x}, unhandled compressed instruction "
+                                 f"0b{read_bitfield(ins, 15, 13):03b}_{read_bitfield(ins, 12, 12):01b}_{read_bitfield(ins, 11, 7):05b}_{read_bitfield(ins, 6, 2):05b}_{read_bitfield(ins, 1, 0):02b}")
 
 
 class StateUpdate:
