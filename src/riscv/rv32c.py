@@ -168,11 +168,11 @@ class RV32C(InstructionSet):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs2']][self.nameidx]}"
     class C_JR(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            raise NotImplemented()
+            hart.pc=hart.x[p['rs1']]
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            raise NotImplemented()
+            return f"C.JR   x{p['rs1']:2}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            raise NotImplemented()
+            return f"pc={self.abi_regnames[p['rs1']][self.nameidx]}"
     class C_JAL(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             hart.x[1] = hart.pc+2
