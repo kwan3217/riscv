@@ -322,7 +322,27 @@ class RV32C(InstructionSet):
                 if p['rd']==0:
                     return "C.UNIMP"
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=stackptr+{p['imm']}"
-    class C_EBREAK_JALR_ADD(InstructionHandler):
+    class C_ADD(InstructionHandler):
+        """
+        Execute C.EBREAK, C.JALR, or C.ADD. These all
+        have the same opcode and funct bits, so they
+        are only distinguishable by their register operands:
+        * C.ADD - rs1/rd!=0, rs2!=0. IE don't use x0 as either
+          a source or a destination. This would be a NOP, so
+          we steal those bits for something else. If rs1/rd==0,
+          this is a hint as it would be a NOP.
+        * C.JALR - rs1/rd!=0, rs2==0. If we would source an add
+          from x0, then this is a JALR instead
+        * C.EBREAK - If this would both source and write to x0,
+          then this is an EBREAK instead.
+        """
+        def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
+            hart.x[p['rd']]=hart.x[p['rs1']]+hart.x[p['rs2']]
+        def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
+            return f"C.ADD  x{p['rd']:2d},x{p['rs2']:2d}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.abi_regnames[p['rd']][self.nameidx]}+={self.abi_regnames[p['rs2']][self.nameidx]}"
+    class C_EBREAK_JALR(InstructionHandler):
         """
         Execute C.EBREAK, C.JALR, or C.ADD. These all
         have the same opcode and funct bits, so they
@@ -523,8 +543,8 @@ class RV32C(InstructionSet):
         " |__ _ _____ zzzzz |_": "C.HINT8",  # Equivalent to C.MV x0=rs2
         " |__ | _____ _____ |_": "C.EBREAK",  # Encoding that C.ADD x0,x0 *would* have
         " |__ | lllll _____ |_": "C.JALR",  # Encoding that C.ADD rs1/rd,x0 *would* have
-        " |__ | fffff zzzzz |_": "C.ADD",
-        " |__ | _____ zzzzz |_": "C.HINT9",  # Encoding that C.ADD x0,rs2 *would* have
+        " |__ | fffff zzzzz |_": C_ADD(),
+        " |__ | _____ zzzzz |_": C_NOP("C.HINT_ADD rd=x0"),  # Encoding that C.ADD x0,rs2 *would* have
         " |_| 543876 zzzzz |_": None,  # C.FSDSP, CF
         " |_| 549876 zzzzz |_": None,  # C.SQSP, C128I
         " ||_ 543276 zzzzz |_": "C.SWSP",
