@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Callable, Mapping
 
 import riscv.bits
-from riscv.decode import Handler
 from riscv.hart import InstructionSet, Hart, InstructionHandler, Opcode, WrongInterpreter
 from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
 
@@ -107,158 +106,108 @@ def J(ins:int,XLEN:int,signed:bool)->ParsedInstruction:
 
 
 class RV32I(InstructionSet):
-    def interpret(self, hart: Hart, ins: int):
-        p=R(ins,hart.XLEN,None)
-        if read_bitfield(p.opcode,1,0)!=0b11:
-            raise WrongInterpreter("Compressed instruction, don't handle it here")
-        try:
-            ins_type = self.ins_exec[Opcode(read_bitfield(p.opcode, 6, 2))]
-            if isinstance(ins_type,Mapping):
-                ins_type = ins_type[p.funct3]
-                if isinstance(ins_type,Mapping):
-                    ins_type = ins_type[p.funct7]
-        except KeyError:
-            raise WrongInterpreter("Not found in RV32I instruction table")
-        print(f"{hart.pc:08x} -- {ins:08x}  {ins_type.disasm(ins,hart.XLEN)}  # {ins_type.formula(ins,hart.XLEN)}")
-        ins_type.execute(ins, hart)
     class LUI(InstructionHandler):
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = U(ins, hart.XLEN, False)
-            hart.x[p.rd] = p.imm
-        def disasm(self, ins: int, XLEN: int):
-            p = U(ins, XLEN, False)
-            return f"LUI    r{p.rd:2},     {p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = U(ins, XLEN, False)
-            return f"{self.abi_regnames[p.rd][self.nameidx]}=0x{p.imm:08x}"
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            hart.x[p["rd"]] = p["imm"]
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"LUI    r{p['rd']:2},     {p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.abi_regnames[p['rd']][self.nameidx]}=0x{p['imm']:08x}"
     class AUIPC(InstructionHandler):
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = U(ins, hart.XLEN, True)
-            hart.x[p.rd] = hart.pc + p.imm
-
-        def disasm(self, ins: int, XLEN: int):
-            p = U(ins, XLEN, True)
-            return f"AUIPC  r{p.rd:2},     {p.imm:12}"
-
-        def formula(self, ins: int, XLEN: int):
-            p = U(ins, XLEN, True)
-            return f"r{p.rd}=pc{'+' if p.imm >= 0 else ''}{p.imm}"
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            hart.x[p["rd"]] = hart.pc + p["imm"]
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"AUIPC  r{p['rd']:2},     {p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            return f"r{p['rd']}=pc{'+' if p['imm'] >= 0 else ''}0x{p['imm']:08x}"
     class JAL(InstructionHandler):
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = J(ins, hart.XLEN, True)
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             retaddr=hart.pc+4
             target = hart.pc
-            target += p.imm
+            target += p['imm']
             target &= bitmask(31, 1)
-            hart.x[p.rd] = retaddr
+            hart.x[p['rd']] = retaddr
             hart.pc = target
-        def disasm(self, ins: int, XLEN: int):
-            p = J(ins, XLEN, True)
-            return f"JAL    r{p.rd:2},     {p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = J(ins, XLEN, True)
-            if p.rd == 0:
-                return f"pc=pc{'+' if p.imm >= 0 else ''}{p.imm}"
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"JAL    r{p['rd']:2},     {p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            if p['rd'] == 0:
+                return f"pc=pc{'+' if p['imm'] >= 0 else ''}{p['imm']}"
             else:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}=pc+4, pc=pc{'+' if p.imm >= 0 else ''}{p.imm}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}=pc+4, pc=pc{'+' if p['imm'] >= 0 else ''}{p['imm']}"
     class JALR(InstructionHandler):
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = I(ins, hart.XLEN, True)
-            target = hart.x[p.rs1]
-            target += signed(p.imm, 12)
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            target = hart.x[p['rs1']]
+            target += signed(p['imm'], 12)
             target &= bitmask(31, 1)
             retaddr=hart.pc+4
-            hart.x[p.rd] = retaddr
+            hart.x[p['rd']] = retaddr
             hart.pc = target
-        def disasm(self, ins: int, XLEN: int):
-            p = I(ins, XLEN, True)
-            return f"JALR   r{p.rd:2},r{p.rs1:2},{p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = I(ins, XLEN, True)
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"JALR   r{p['rd']:2},r{p['rs1']:2},{p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
             result = ""
-            if p.rd != 0:
-                result = f"{self.abi_regnames[p.rd][self.nameidx]}=pc+4, "
-            result += f"pc={self.abi_regnames[p.rs1][self.nameidx]}"
-            if p.imm != 0:
-                result += f"{'+' if p.imm >= 0 else ''}{p.imm}"
+            if p['rd'] != 0:
+                result = f"{self.abi_regnames[p['rd']][self.nameidx]}=pc+4, "
+            result += f"pc={self.abi_regnames[p['rs1']][self.nameidx]}"
+            if p['imm'] != 0:
+                result += f"{'+' if p['imm'] >= 0 else ''}{p['imm']}"
             return result
     class Load(InstructionHandler):
         def __init__(self,name:str,size:int,signed:bool):
             self.name=name
             self.size=size
             self.signed=signed
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = I(ins, hart.XLEN, True)
-            unsigned = read_bitfield(p.funct3, 2, 2)
-            size = 1 << read_bitfield(p.funct3, 1, 0)
-            if size > 4:
-                raise WrongInterpreter(f"Unsupported size {size}")
-            if size==4 and unsigned:
-                raise WrongInterpreter(f"Unsigned 32-bit load not supported in RV32I -- should be handled by RV64I")
-            addr = hart.x[p.rs1]  # base
-            addr += signed(p.imm, 12)
-            val = hart.mem.load(size, addr)
-            if unsigned == 0:
-                val = signed(val, size * 8 - 1)
-            print(f"mem[0x{addr:0{size * 2}x}]->0x{val:0{size * 2}x}")
-            hart.x[p.rd] = val
-        def disasm(self, ins: int, XLEN: int):
-            p = I(ins, XLEN, True)
-            mnemonic = ["LB    ", "LH    ", "LW    ", None, "LBU   ", "LHU   "]
-            return f"{mnemonic[p.funct3]} r{p.rs1:2},r{p.rd:2},{p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = I(ins, XLEN, True)
-            cast = ["i8", "i16", "i32", None, "u8", "u16"]
-            return f"r{p.rd}={cast[p.funct3]}(mem[r{p.rs1}{'+' if p.imm >= 0 else ''}{p.imm}])"
+            if self.signed:
+                self.cast=(None,"i8","i16",None,"i32")[self.size]
+            else:
+                self.cast=(None,"u8","u16",None,"u32")[self.size]
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            addr = hart.x[p['rs1']]  # base
+            addr += signed(p['imm'], 12)
+            val = hart.mem.load(self.size, addr)
+            if self.signed:
+                val = signed(val, self.size * 8 - 1)
+            print(f"mem[0x{addr:0{self.size * 2}x}]->0x{val:0{self.size * 2}x}")
+            hart.x[p['rd']] = val
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.name} x{p['rs1']:2},x{p['rd']:2},{p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            return f"x{p['rd']}={self.cast}(mem[x{p['rs1']}{'+' if p['imm'] >= 0 else ''}{p['imm']}])"
     class Store(InstructionHandler):
-        def __init__(self, name: str, size: int):
-            self.name = name
-            self.size = size
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = S(ins, hart.XLEN, True)
-            addr = hart.x[p.rs1]  # base
-            addr += p.imm
-            size = 1 << read_bitfield(p.funct3, 1, 0)
-            unsigned = read_bitfield(p.funct3, 2, 2)
-            if unsigned == 1:
-                raise WrongInterpreter("No such thing as a signed store")
-            if size > 4:
-                raise WrongInterpreter(f"Unsupported size {size}")
-            val=hart.x[p.rs2]
-            hart.mem.store(size, addr, val)
-            print(f"mem[0x{addr:0{size * 2}x}]<-0x{val:0{size * 2}x}")
-        def disasm(self, ins: int, XLEN: int):
-            p = S(ins, XLEN, True)
-            size = 1 << read_bitfield(p.funct3, 1, 0)
-            mnemonic = [None, "SB    ", "SH    ", None, "SW    "]
-            return f"{mnemonic[size]} r{p.rs1:2},r{p.rs2:2},{p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = S(ins, XLEN, True)
-            size = 1 << read_bitfield(p.funct3, 1, 0)
-            cast = [None, "b8", "b16", None, "b32"]
-            return f"mem[{self.abi_regnames[p.rs1][0]}{'+' if p.imm >= 0 else ''}{p.imm}]={cast[size]}({self.abi_regnames[p.rs2][0]})"
+        def __init__(self,name:str,size:int):
+            self.name=name
+            self.size=size
+            self.cast=(None,"b8","b16",None,"b32")[self.size]
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            addr = hart.x[p['rs1']]  # base
+            addr += p['imm']
+            val=hart.x[p['rs2']]
+            hart.mem.store(self.size, addr, val)
+            print(f"mem[0x{addr:0{self.size * 2}x}]<-0x{val:0{self.size * 2}x}")
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.name:7s}x{p['rs1']:2},x{p['rs2']:2},{p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            return f"mem[{self.abi_regnames[p['rs1']][0]}{'+' if p['imm'] >= 0 else ''}{p['imm']}]={self.cast}({self.abi_regnames[p['rs2']][0]})"
     class Branch(InstructionHandler):
         def __init__(self, name: str, symbol: str, condition: Callable[['Hart',int, int], bool]):
             self.name = name
             self.symbol = symbol
             self.condition = condition
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = B(ins, hart.XLEN, True)
-            if self.condition(hart, hart.x[p.rs1], hart.x[p.rs2]):
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            if self.condition(hart, hart.x[p['rs1']], hart.x[p['rs2']]):
                 target = hart.pc
-                target += signed(p.imm, 12)
+                target += signed(p['imm'], 12)
                 hart.pc = target
-        def disasm(self, ins: int, XLEN: int):
-            p = B(ins, XLEN, True)
-            return f"{self.name:7s}x{p.rs1:2},x{p.rs2:2},{p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = B(ins, XLEN, True)
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.name:7s}x{p['rs1']:2},x{p['rs2']:2},{p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
             if "%s" in self.symbol:
                 sym = self.symbol
             else:
                 sym = f"%s{self.symbol}%s"
-            sym = sym % (self.abi_regnames[p.rs1][self.nameidx], self.abi_regnames[p.rs2][self.nameidx])
-            return f"if {sym} pc=pc{'+' if p.imm >= 0 else ''}{p.imm}"
+            sym = sym % (self.abi_regnames[p['rs1']][self.nameidx], self.abi_regnames[p['rs2']][self.nameidx])
+            return f"if {sym} pc{'+' if p['imm'] >= 0 else '+'}={p['imm'] if p['imm']>=0 else -p['imm']}"
     class Nop(InstructionHandler):
         def __init__(self, name: str = "NOP", comment: str = None):
             """
@@ -269,11 +218,11 @@ class RV32I(InstructionSet):
             """
             self.name = name
             self.comment = comment
-        def execute(self, ins: int, hart: Hart) -> None:
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             pass
-        def disasm(self, ins: int, XLEN: int):
+        def disasm(self, p: Mapping[str,int], XLEN: int):
             return self.name
-        def formula(self, ins: int, XLEN: int):
+        def formula(self, p: Mapping[str,int], XLEN: int):
             return self.comment
     class RegImmed(InstructionHandler):
         """
@@ -303,46 +252,37 @@ class RV32I(InstructionSet):
             self.name = name
             self.symbol = symbol
             self.op = op
-
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = I(ins, hart.XLEN, False)
-            result = self.op(hart, hart.x[p.rs1], p.imm)
-            hart.x[p.rd] = result
-
-        def disasm(self, ins: int, XLEN: int):
-            p = I(ins, XLEN, False)
-            return f"{self.name:7s}x{p.rd:2},x{p.rs1:2},{p.imm:12}"
-
-        def formula(self, ins: int, XLEN: int):
-            p = I(ins, XLEN, False)
-            if p.rs1 == 0:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}={p.imm}"
-            if "ADD" in self.name and p.imm < 0:
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            result = self.op(hart, hart.x[p['rs1']], p['imm'])
+            hart.x[p['rd']] = result
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.name:7s}x{p['rd']:2},x{p['rs1']:2},{p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            if p['rs1'] == 0:
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={p['imm']}"
+            if "ADD" in self.name and p['imm'] < 0:
                 this_symbol = ""
             else:
                 this_symbol = self.symbol
             if "%s" in self.symbol:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}={self.symbol % (self.abi_regnames[p.rs1][self.nameidx], p.imm)}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.symbol % (self.abi_regnames[p['rs1']][self.nameidx], p['imm'])}"
             else:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}={self.abi_regnames[p.rs1][self.nameidx]}{this_symbol}{p.imm}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs1']][self.nameidx]}{this_symbol}{p['imm']}"
     class RegReg(InstructionHandler):
         def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
             self.name = name
             self.symbol = symbol
             self.op = op
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = R(ins, hart.XLEN, True)
-            result = self.op(hart, hart.x[p.rs1], hart.x[p.rs2])
-            hart.x[p.rd] = result
-        def disasm(self, ins: int, XLEN: int):
-            p = R(ins, XLEN, True)
-            return f"{self.name:7s}x{p.rd:2},x{p.rs1:2},x{p.rs2:2}"
-        def formula(self, ins: int, XLEN: int):
-            p = R(ins, XLEN, True)
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            result = self.op(hart, hart.x[p['rs1']], hart.x[p['rs2']])
+            hart.x[p['rd']] = result
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.name:7s}x{p['rd']:2},x{p['rs1']:2},x{p['rs2']:2}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
             if "%s" in self.symbol:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}={self.symbol % (self.abi_regnames[p.rs1][self.nameidx], self.abi_regnames[p.rs2][self.nameidx])}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.symbol % (self.abi_regnames[p['rs1']][self.nameidx], self.abi_regnames[p['rs2']][self.nameidx])}"
             else:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}={self.abi_regnames[p.rs1][self.nameidx]}{self.symbol}{self.abi_regnames[p.rs2][self.nameidx]}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs1']][self.nameidx]}{self.symbol}{self.abi_regnames[p['rs2']][self.nameidx]}"
     class SYSTEM(InstructionHandler):
         def __init__(self, name: str = "Undefined", comment: str = None, message: str = None):
             """
@@ -357,57 +297,59 @@ class RV32I(InstructionSet):
                 self.message = message
             self.name = name
             self.comment = comment
-        def execute(self, ins: int, hart: Hart) -> None:
-            raise StopIteration(f"{self.message} -- parsed={I(ins, hart.XLEN, True)}")
-        def disasm(self, ins: int, XLEN: int):
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            raise StopIteration(f"{self.message} -- parsed={p}")
+        def disasm(self, p: Mapping[str,int], XLEN: int):
             return self.name
-        def formula(self, ins: int, XLEN: int):
+        def formula(self, p: Mapping[str,int], XLEN: int):
             return self.comment
     #        opcode  Funct3  Funct7
     ins_exec={
-        "VUTSRQPONMLKJIHGFEDC    ddddd _||_|||":Handler(LUI()),
-        "VUTSRQPONMLKJIHGFEDC    ddddd __|_|||":Handler(AUIPC()),
-        "VUTSRQPONMLKJIHGFEDC    ddddd ||_||||":Handler(JAL()),
-        "BA9876543210  lllll ___ ddddd ||__|||":Handler(JALR()),
-        "CA98765 zzzzz lllll ___ 4321B ||___||":Handler(Branch('BEQ','==',lambda hart, rs1, rs2: rs1 == rs2)),
-        "CA98765 zzzzz lllll __| 4321B ||___||":Handler(Branch('BNE','!=',lambda hart, rs1, rs2: rs1 != rs2)),
-        "CA98765 zzzzz lllll |__ 4321B ||___||":Handler(Branch('BLT','signed(%s)<signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) < hart.signed(rs2))),
-        "CA98765 zzzzz lllll |_| 4321B ||___||":Handler(Branch('BGE','signed(%s)>=signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) >= hart.signed(rs2))),
-        "CA98765 zzzzz lllll ||_ 4321B ||___||":Handler(Branch('BLTU','<',lambda hart, rs1, rs2: rs1 < rs2)),
-        "CA98765 zzzzz lllll ||| 4321B ||___||":Handler(Branch('BGEU','>=',lambda hart, rs1, rs2: rs1 >= rs2)),
-        "BA9876543210  lllll ___ ddddd _____||":Handler(Load('LB',size=1,signed=True)),
-        "BA9876543210  lllll __| ddddd _____||":Handler(Load('LH',size=2,signed=True)),
-        "BA9876543210  lllll _|_ ddddd _____||":Handler(Load('LW',size=4,signed=True)),
-        "BA9876543210  lllll |__ ddddd _____||":Handler(Load('LBU',size=1,signed=False)),
-        "BA9876543210  lllll |_| ddddd _____||":Handler(Load('LHU',size=2,signed=False)),
-        "BA98765 zzzzz lllll ___ 43210 _|___||":Handler(Store('SB',size=1)),
-        "BA98765 zzzzz lllll __| 43210 _|___||":Handler(Store('SH',size=2)),
-        "BA98765 zzzzz lllll _|_ 43210 _|___||":Handler(Store('SW',size=4)),
-        "BA9876543210  lllll ___ ddddd __|__||":Handler(RegImmed("ADDI", "+", lambda hart, rs1, imm: rs1 + imm)),
-        "BA9876543210  lllll _|_ ddddd __|__||":Handler(RegImmed("SLTI", "(signed(%s)<signed(%s))?1:0",lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0)),
-        "BA9876543210  lllll _|| ddddd __|__||":Handler(RegImmed("SLTIU","(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0)),
-        "BA9876543210  lllll |__ ddddd __|__||":Handler(RegImmed("XORI", "^", lambda hart, rs1, imm: rs1 ^ imm)),
-        "BA9876543210  lllll ||_ ddddd __|__||":Handler(RegImmed("ORI", "|", lambda hart, rs1, imm: rs1 | imm)),
-        "BA9876543210  lllll ||| ddddd __|__||":Handler(RegImmed("ANDI", "&", lambda hart, rs1, imm: rs1 & imm)),
-        "_______ 43210 lllll __| ddddd __|__||":Handler(RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << (imm & 0x1f)),sign='+'),
+        "xVUTSRQPONMLKJIHGFEDC    ddddd _||_|||":LUI(),
+        "-VUTSRQPONMLKJIHGFEDC    ddddd __|_|||":AUIPC(),
+        "-KA987654321BJIHGFEDC    ddddd ||_||||":JAL(),
+        " BA9876543210  lllll ___ ddddd ||__|||":JALR(),
+        " CA98765 zzzzz lllll ___ 4321B ||___||":Branch('BEQ','==',lambda hart, rs1, rs2: rs1 == rs2),
+        " CA98765 zzzzz lllll __| 4321B ||___||":Branch('BNE','!=',lambda hart, rs1, rs2: rs1 != rs2),
+        " CA98765 zzzzz lllll |__ 4321B ||___||":Branch('BLT','signed(%s)<signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) < hart.signed(rs2)),
+        " CA98765 zzzzz lllll |_| 4321B ||___||":Branch('BGE','signed(%s)>=signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) >= hart.signed(rs2)),
+        " CA98765 zzzzz lllll ||_ 4321B ||___||":Branch('BLTU','<',lambda hart, rs1, rs2: rs1 < rs2),
+        " CA98765 zzzzz lllll ||| 4321B ||___||":Branch('BGEU','>=',lambda hart, rs1, rs2: rs1 >= rs2),
+        " BA9876543210  lllll ___ ddddd _____||":Load('LB',size=1,signed=True),
+        " BA9876543210  lllll __| ddddd _____||":Load('LH',size=2,signed=True),
+        " BA9876543210  lllll _|_ ddddd _____||":Load('LW',size=4,signed=True),
+        " BA9876543210  lllll |__ ddddd _____||":Load('LBU',size=1,signed=False),
+        " BA9876543210  lllll |_| ddddd _____||":Load('LHU',size=2,signed=False),
+        " BA98765 zzzzz lllll ___ 43210 _|___||":Store('SB',size=1),
+        " BA98765 zzzzz lllll __| 43210 _|___||":Store('SH',size=2),
+        " BA98765 zzzzz lllll _|_ 43210 _|___||":Store('SW',size=4),
+        "-BA9876543210  lllll ___ ddddd __|__||":RegImmed("ADDI", "+", lambda hart, rs1, imm: rs1 + imm),
+        "-BA9876543210  lllll _|_ ddddd __|__||":RegImmed("SLTI", "(signed(%s)<signed(%s))?1:0",lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0),
+        "xBA9876543210  lllll _|| ddddd __|__||":RegImmed("SLTIU","(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0),
+        "xBA9876543210  lllll |__ ddddd __|__||":RegImmed("XORI", "^", lambda hart, rs1, imm: rs1 ^ imm),
+        "xBA9876543210  lllll ||_ ddddd __|__||":RegImmed("ORI", "|", lambda hart, rs1, imm: rs1 | imm),
+        "xBA9876543210  lllll ||| ddddd __|__||":RegImmed("ANDI", "&", lambda hart, rs1, imm: rs1 & imm),
+        "+_______ 43210 lllll __| ddddd __|__||":RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << (imm & 0x1f)),
                 # I can never remember whether which of >> or >>> is logical and
                 # which is arithmetic, so I stick a letter in the middle of the
                 # symbol instead.
-        "_______ 43210 lllll |_| ddddd __|__||":Handler(RegImmed("SRLI", ">L>", lambda hart, rs1, imm: rs1 >> (imm & 0x1f))),
-        "_|_____ 43210 lllll |_| ddddd __|__||":Handler(RegImmed("SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> read_bitfield(imm, 4, 0))),
-        "_______ zzzzz lllll ___ ddddd _||__||":Handler(RegReg("ADD", "+", lambda hart, rs1, rs2: rs1 + rs2)),
-        "_|_____ zzzzz lllll ___ ddddd _||__||":Handler(RegReg("SUB", "-", lambda hart, rs1, rs2: rs1 - rs2)),
-        "_______ zzzzz lllll __| ddddd _||__||":Handler(RegReg("SLL", "<<", lambda hart, rs1, rs2: rs1 << read_bitfield(rs2, 4, 0))),
-        "_______ zzzzz lllll _|_ ddddd _||__||":Handler(RegReg("SLT", "(signed(%s)<signed(%s))?1:0",lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0)),
-        "_______ zzzzz lllll _|| ddddd _||__||":Handler(RegReg("SLTU", "(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0)),
-        "_______ zzzzz lllll |__ ddddd _||__||":Handler(RegReg("XOR", "^", lambda hart, rs1, rs2: rs1 ^ rs2)),
-        "_______ zzzzz lllll |_| ddddd _||__||":Handler(RegReg("SRL", ">L>", lambda hart, rs1, rs2: rs1 >> read_bitfield(rs2, 4, 0))),
-        "_|_____ zzzzz lllll |_| ddddd _||__||":Handler(RegReg("SRA", ">A>", lambda hart, rs1, rs2: hart.signed(rs1) >> read_bitfield(rs2, 4, 0))),
-        "_______ zzzzz lllll ||_ ddddd _||__||":Handler(RegReg("OR", "|", lambda hart, rs1, rs2: rs1 | rs2)),
-        "_______ zzzzz lllll ||| ddddd _||__||":Handler(RegReg("AND", "&", lambda hart, rs1, rs2: rs1 & rs2)),
-        "BA9876543210  lllll ___ ddddd ___||||":Handler(Nop("FENCE", "Memory Fence")),
-        "____________  _____ ___ _____ |||__||":Handler(SYSTEM("EBREAK", "Break to debugger", "Break to debugger")),
-        "___________|  _____ ___ _____ |||__||":Handler(SYSTEM("ECALL", "System call", "System call")),
+        "+_______ 43210 lllll |_| ddddd __|__||":RegImmed("SRLI", ">L>", lambda hart, rs1, imm: rs1 >> (imm & 0x1f)),
+        "+_|_____ 43210 lllll |_| ddddd __|__||":RegImmed("SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> read_bitfield(imm, 4, 0)),
+        " _______ zzzzz lllll ___ ddddd _||__||":RegReg("ADD", "+", lambda hart, rs1, rs2: rs1 + rs2),
+        " _|_____ zzzzz lllll ___ ddddd _||__||":RegReg("SUB", "-", lambda hart, rs1, rs2: rs1 - rs2),
+        " _______ zzzzz lllll __| ddddd _||__||":RegReg("SLL", "<<", lambda hart, rs1, rs2: rs1 << read_bitfield(rs2, 4, 0)),
+        " _______ zzzzz lllll _|_ ddddd _||__||":RegReg("SLT", "(signed(%s)<signed(%s))?1:0",lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0),
+        " _______ zzzzz lllll _|| ddddd _||__||":RegReg("SLTU", "(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0),
+        " _______ zzzzz lllll |__ ddddd _||__||":RegReg("XOR", "^", lambda hart, rs1, rs2: rs1 ^ rs2),
+        " _______ zzzzz lllll |_| ddddd _||__||":RegReg("SRL", ">L>", lambda hart, rs1, rs2: rs1 >> read_bitfield(rs2, 4, 0)),
+        " _|_____ zzzzz lllll |_| ddddd _||__||":RegReg("SRA", ">A>", lambda hart, rs1, rs2: hart.signed(rs1) >> read_bitfield(rs2, 4, 0)),
+        " _______ zzzzz lllll ||_ ddddd _||__||":RegReg("OR", "|", lambda hart, rs1, rs2: rs1 | rs2),
+        " _______ zzzzz lllll ||| ddddd _||__||":RegReg("AND", "&", lambda hart, rs1, rs2: rs1 & rs2),
+        "+BA9876543210  lllll ___ ddddd ___||||":Nop("FENCE", "Memory Fence"),
+        " ____________  _____ ___ _____ |||__||":SYSTEM("EBREAK", "Break to debugger", "Break to debugger"),
+        " ___________|  _____ ___ _____ |||__||":SYSTEM("ECALL", "System call", "System call"),
     }
+    def get_decode_table(self):
+        return self.ins_exec
 
 
