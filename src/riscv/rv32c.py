@@ -437,12 +437,12 @@ class RV32C(InstructionSet):
         "+___ _ fffff 43210 |_": C_RegImmed("C.SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),  # Bit 12 is nzimm5, which must be 0 for C32I
         " ___ 5 fffff 43210 |_": None,  # C.SLLI on C64/128I, reserved for non-standard extensions on C32I
         "+___ _ fffff _____ |_": C_NOP("C.HINT_SLLI 64"),  # C.SLLI rd,64 on C128I, hint on C32/64I
-        " __| 5 ddddd 43876 |_": None,  # C.FLDSP, C32/64F
-        " __| 5 ddddd 49876 |_": None,  # C.LQSP, C128I
+        "+__| 5 ddddd 43876 |_": None,  # C.FLDSP, C32/64F
+        "+__| 5 ddddd 49876 |_": None,  # C.LQSP, C128I
         "+_|_ 5 ddddd 43276 |_": C_LWSP(),
         " _|_ 5 _____ 43276 |_": None,  # Reserved, equivalent to C.LWSP x0,imm
-        " _|| 5 ddddd 43276 |_": None,  # C.FLWSP
-        " _|| 5 ddddd 43876 |_": None,  # C.LDSP, C64/128I
+        "+_|| 5 ddddd 43276 |_": None,  # C.FLWSP
+        "+_|| 5 ddddd 43876 |_": None,  # C.LDSP, C64/128I
         " _|| 5 _____ 43876 |_": None,  # Reserved, equivalent to C.LDSP x0,imm
         " |__ _ lllll _____ |_": C_JR(),  # Encoding that C.MV rd=x0 *would* have
         " |__ _ _____ _____ |_": None,  # Reserved, equivalent to C.JR x0
@@ -452,11 +452,11 @@ class RV32C(InstructionSet):
         " |__ | lllll _____ |_": C_JALR(),  # Encoding that C.ADD rs1/rd,x0 *would* have
         " |__ | fffff zzzzz |_": C_ADD(),
         " |__ | _____ zzzzz |_": C_NOP("C.HINT_ADD rd=x0"),  # Encoding that C.ADD x0,rs2 *would* have
-        " |_| 543876 zzzzz |_": None,  # C.FSDSP, CF
-        " |_| 549876 zzzzz |_": None,  # C.SQSP, C128I
-        " ||_ 543276 zzzzz |_": C_SWSP(),
-        " ||| 543276 zzzzz |_": None,  # C.FSWSP, C32F
-        " ||| 543876 zzzzz |_": None,  # C.SDSP, C64/128F
+        "+|_| 543876 zzzzz |_": None,  # C.FSDSP, CF
+        "+|_| 549876 zzzzz |_": None,  # C.SQSP, C128I
+        "+||_ 543276 zzzzz |_": C_SWSP(), # Zero-extended immediate
+        "+||| 543276 zzzzz |_": None,  # C.FSWSP, C32F
+        "+||| 543876 zzzzz |_": None,  # C.SDSP, C64/128F
     }
 
 
