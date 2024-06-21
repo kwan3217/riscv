@@ -4,7 +4,7 @@ Implement the Risc-V 32-bit integer base instructions
 Created: 6/11/24
 """
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Mapping
 
 from riscv.hart import InstructionSet, Hart, InstructionHandler, WrongInterpreter, \
     IllegalInstruction
@@ -152,20 +152,6 @@ class Zicsr(InstructionSet):
     """
     def add_state(self,hart:Hart):
         hart.csr=CSR()
-    def interpret(self, hart: Hart, ins: int)->bool:
-        p=decode(ins)
-        if p.opcode!=0b1110011:
-            raise WrongInterpreter("Not a system instruction")
-        ins_type = self.ins_exec[p.funct3]
-        if ins_type is None:
-            raise WrongInterpreter("Instruction not in Zicsr table")
-        elif not isinstance(ins_type, InstructionHandler):
-            if p.imm not in ins_type:
-                raise WrongInterpreter()
-            ins_type=ins_type[p.imm]
-        print(f"{hart.pc:08x} -- {ins:08x}  {ins_type.disasm(ins,hart.XLEN)}  # {ins_type.formula(ins,hart.XLEN)}")
-        ins_type.execute(ins, hart)
-    ins_exec = {func3:None for func3 in range(8)}
     class xRET(InstructionHandler):
         """
         Return to a different privilege level. For now we just
@@ -176,18 +162,15 @@ class Zicsr(InstructionSet):
         def __init__(self, name: str, csr:int):
             self.name = name
             self.csr = csr
-        def execute(self, ins: int, hart: Hart) -> None:
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             hart.pc=hart.csr[self.csr]
-        def disasm(self, ins: int, XLEN: int):
+        def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"{self.name:7s}"
-        def formula(self, ins: int, XLEN: int):
+        def formula(self, p: Mapping[str,int], XLEN: int):
             name=f"0x{self.csr:03x}"
             if self.csr in csrnames:
                 name+=f" ({csrnames[self.csr][1]})"
             return f"pc=CSR[{name}]"
-    ins_exec[0b000]={}
-    ins_exec[0b000][0b0011000_00010]=xRET("MRET",0x341)
-
     class CSRR(InstructionHandler):
         """
         CSR Read and Set -- perform the following two operations
@@ -207,36 +190,33 @@ class Zicsr(InstructionSet):
             self.name=name
             self.symbol=symbol
             self.op=op
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = decode(ins)
-            if p.rd==0:
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            if p['rd']==0:
                 # Special case -- if would copy csr to x0, instead
                 # don't read csr at all and don't trigger any read
                 # side-effects. Just write rs1 to csr.
                 old_csr=0
             else:
-                old_csr = hart.csr[p.imm]
-            old_reg=hart.x[p.rs1]
-            hart.x[p.rd]=old_csr
+                old_csr = hart.csr[p['imm']]
+            old_reg=hart.x[p['rs1']]
+            hart.x[p['rd']]=old_csr
             # Special case: If using rs1=0, IE x0 as mask, don't
             # write to the csr at all and don't trigger any write
             # side effects.
-            if p.rs1!=0:
-                hart.csr[p.imm]=self.op(old_csr,old_reg)
-        def disasm(self, ins: int, XLEN: int):
-            p = decode(ins)
-            return f"{self.name:7s}x{p.rd:2},x{p.rs1:2},{p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = decode(ins)
-            name=f"0x{p.imm:03x}"
-            if p.imm in csrnames:
-                name+=f" ({csrnames[p.imm][1]})"
-            if p.rd==0:
-                return f"CSR[{name}]{self.symbol}{self.abi_regnames[p.rs1][self.nameidx]}"
-            elif "CSRRS"==self.name and p.rs1==0:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}]"
+            if p['rs1']!=0:
+                hart.csr[p['imm']]=self.op(old_csr,old_reg)
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.name:7s}x{p['rd']:2},x{p['rs1']:2},{p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            name=f"0x{p['imm']:03x}"
+            if p['imm'] in csrnames:
+                name+=f" ({csrnames[p['imm']][1]})"
+            if p['rd']==0:
+                return f"CSR[{name}]{self.symbol}{self.abi_regnames[p['rs1']][self.nameidx]}"
+            elif "CSRRS"==self.name and p['rs1']==0:
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}=CSR[{name}]"
             else:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}],CSR[{name}]{self.symbol}{self.abi_regnames[p.rs1][self.nameidx]}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}=CSR[{name}],CSR[{name}]{self.symbol}{self.abi_regnames[p['rs1']][self.nameidx]}"
     class CSRRW(InstructionHandler):
         """
         CSR Read and Write -- perform the following two operations
@@ -249,9 +229,8 @@ class Zicsr(InstructionSet):
         * Write the value in rs1 to the CSR.
 
         """
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = decode(ins)
-            if p.rd==0:
+        def execute(self, p:Mapping[str,int], hart: Hart) -> None:
+            if p['rd']==0:
                 # Special case -- if would copy csr to x0, instead
                 # don't read csr at all and don't trigger any read
                 # side-effects. Just write rs1 to csr.
@@ -260,22 +239,20 @@ class Zicsr(InstructionSet):
                 # Normal case -- simultaneously copy csr to rd and rs1 to csr. When done,
                 # rd will have old csr value and csr will have old rs1 value. It is
                 # specifically allowed for rd==rs1, which results in a proper swap.
-                old_csr=hart.csr[p.imm]
-            old_reg=hart.x[p.rs1]
-            hart.x[p.rd]=old_csr
-            hart.csr[p.imm]=old_reg
-        def disasm(self, ins: int, XLEN: int):
-            p = decode(ins)
-            return f"CSRRW  x{p.rd:2},x{p.rs1:2},{p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = decode(ins)
-            name=f"0x{p.imm:03x}"
-            if p.imm in csrnames:
-                name+=f" ({csrnames[p.imm][1]})"
-            if p.rd==0:
-                return f"CSR[{name}]={self.abi_regnames[p.rs1][self.nameidx]}"
+                old_csr=hart.csr[p['imm']]
+            old_reg=hart.x[p['rs1']]
+            hart.x[p['rd']]=old_csr
+            hart.csr[p['imm']]=old_reg
+        def disasm(self, p:Mapping[str,int], XLEN: int):
+            return f"CSRRW  x{p['rd']:2},x{p['rs1']:2},{p['imm']:12}"
+        def formula(self, p:Mapping[str,int], XLEN: int):
+            name=f"0x{p['imm']:03x}"
+            if p['imm'] in csrnames:
+                name+=f" ({csrnames[p['imm']][1]})"
+            if p['rd']==0:
+                return f"CSR[{name}]={self.abi_regnames[p['rs1']][self.nameidx]}"
             else:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}],CSR[{name}]={self.abi_regnames[p.rs1][self.nameidx]}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}=CSR[{name}],CSR[{name}]={self.abi_regnames[p['rs1']][self.nameidx]}"
     class CSRI(InstructionHandler):
         """
         CSR Read and Set Immediate -- Same as above, but use an immediate value instead of
@@ -289,39 +266,39 @@ class Zicsr(InstructionSet):
             self.name=name
             self.symbol=symbol
             self.op=op
-        def execute(self, ins: int, hart: Hart) -> None:
-            p = decode(ins)
-            if p.imm not in hart.csr:
-                hart.csr[p.imm]=0
-            if p.rd==0:
+        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
+            if p['imm'] not in hart.csr:
+                hart.csr[p['imm']]=0
+            if p['rd']==0:
                 # Special case -- if would copy csr to x0, instead
                 # don't read csr at all and don't trigger any read
                 # side-effects. Just write rs1 to csr.
-                hart.csr[p.imm]=self.op(hart.csr[p.imm],p.rs1)
+                hart.csr[p['imm']]=self.op(hart.csr[p['imm']],p['rs1'])
             # Normal case -- simultaneously copy csr to rd and rs1 to csr. When done,
             # rd will have old csr value and csr will have old rs1 value. if rd==rs1,
             # this is an atomic swap.
-            old_csr=hart.csr[p.imm]
-            old_reg=p.rs1
-            hart.csr[p.imm]=self.op(old_csr,old_reg)
-            hart.x[p.rd]=old_csr
-        def disasm(self, ins: int, XLEN: int):
-            p = decode(ins)
-            return f"{self.name:7s}x{p.rd:2},{p.rs1:2},{p.imm:12}"
-        def formula(self, ins: int, XLEN: int):
-            p = decode(ins)
-            name=f"0x{p.imm:03x}"
-            if p.imm in csrnames:
-                name+=f" ({csrnames[p.imm][1]})"
-            if p.rd==0:
-                return f"CSR[{name}]{self.symbol}{p.rs1}"
+            old_csr=hart.csr[p['imm']]
+            old_reg=p['rs1']
+            hart.csr[p['imm']]=self.op(old_csr,old_reg)
+            hart.x[p['rd']]=old_csr
+        def disasm(self, p: Mapping[str,int], XLEN: int):
+            return f"{self.name:7s}x{p['rd']:2},{p['rs1']:2},{p['imm']:12}"
+        def formula(self, p: Mapping[str,int], XLEN: int):
+            name=f"0x{p['imm']:03x}"
+            if p['imm'] in csrnames:
+                name+=f" ({csrnames[p['imm']][1]})"
+            if p['rd']==0:
+                return f"CSR[{name}]{self.symbol}{p['rs1']}"
             else:
-                return f"{self.abi_regnames[p.rd][self.nameidx]}=CSR[{name}],CSR[{name}]{self.symbol}{p.rs1}"
-    ins_exec[0b001]=CSRRW()
-    ins_exec[0b010]=CSRR("CSRRS","|=",lambda csr,rs1:csr|rs1)
-    ins_exec[0b011]=CSRR("CSRRC","&=~",lambda csr,rs1:csr&~rs1)
-    ins_exec[0b101]=CSRI("CSRRWI","=",lambda csr,rs1:rs1)
-    ins_exec[0b110]=CSRI("CSRRSI","|=",lambda csr,rs1:csr|rs1)
-    ins_exec[0b111]=CSRI("CSRRCI","&=~",lambda csr,rs1:csr&~rs1)
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}=CSR[{name}],CSR[{name}]{self.symbol}{p['rs1']}"
+    ins_exec={
+        '+BA9876543210 lllll __| ddddd |||__||':CSRRW(),
+        '+BA9876543210 lllll _|_ ddddd |||__||':CSRR("CSRRS" ,"|=" ,lambda csr,rs1:csr|rs1),
+        '+BA9876543210 lllll _|| ddddd |||__||':CSRR("CSRRC" ,"&=~",lambda csr,rs1:csr&~rs1),
+        '+BA9876543210 lllll |_| ddddd |||__||':CSRI("CSRRWI", "=" ,lambda csr,rs1:rs1),     # For CSRI, we have to encode *two* immediates,
+        '+BA9876543210 lllll ||_ ddddd |||__||':CSRI("CSRRSI","|=" ,lambda csr,rs1:csr|rs1), #     one for the CSR index and one for the value to use.
+        '+BA9876543210 lllll ||| ddddd |||__||':CSRI("CSRRCI","&=~",lambda csr,rs1:csr&~rs1),#     We use the rs1 slot for the value.
+        ' __||___ ___|_ _____ ___ _____ |||__||':xRET("MRET",0x341)
+    }
     def get_decode_table(self):
         return self.ins_exec
