@@ -354,12 +354,17 @@ class Regfile:
         self.XLEN=XLEN
     def __getitem__(self,r):
         if r==0:
-            return 0
-        return self._x[r]
+            v=0
+        else:
+            v=self._x[r]
+            print(f"   x{r:2}->0x{v:0{self.XLEN//4}x}")
+        return v
     def __setitem__(self,r,v):
         if r==0:
             return
+        v=v & bitmask(self.XLEN - 1, 0)
+        print(f"   x{r:2}<-0x{v:0{self.XLEN//4}x}")
         #todo - Be careful about signed/unsigned, twos complement, sign extension, etc.
-        self._x[r]= v & bitmask(self.XLEN - 1, 0)
+        self._x[r]=v
 
 
