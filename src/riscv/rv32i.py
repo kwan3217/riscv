@@ -170,9 +170,9 @@ class RV32I(InstructionSet):
                 val = signed(val, self.size * 8 - 1)
             hart.x[p['rd']] = val
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.name} x{p['rs1']:2},x{p['rd']:2},{p['imm']:12}"
+            return f"{self.name:7s}x{p['rs1']:2},x{p['rd']:2},{p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"x{p['rd']}={self.cast}(mem[x{p['rs1']}{'+' if p['imm'] >= 0 else ''}{p['imm']}])"
+            return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.cast}(mem[{self.abi_regnames[p['rs1']][self.nameidx]}{'+' if p['imm'] >= 0 else ''}{p['imm']}])"
     class Store(InstructionHandler):
         def __init__(self,name:str,size:int):
             self.name=name
@@ -186,7 +186,7 @@ class RV32I(InstructionSet):
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"{self.name:7s}x{p['rs1']:2},x{p['rs2']:2},{p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"mem[{self.abi_regnames[p['rs1']][0]}{'+' if p['imm'] >= 0 else ''}{p['imm']}]={self.cast}({self.abi_regnames[p['rs2']][0]})"
+            return f"mem[{self.abi_regnames[p['rs1']][self.nameidx]}{'+' if p['imm'] >= 0 else ''}{p['imm']}]={self.cast}({self.abi_regnames[p['rs2']][self.nameidx]})"
     class Branch(InstructionHandler):
         def __init__(self, name: str, symbol: str, condition: Callable[['Hart',int, int], bool]):
             self.name = name
