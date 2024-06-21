@@ -21,7 +21,8 @@ if __name__=="__main__":
 class Memory(dict):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
-        self.membreak=set()
+        self.lbreak=set()
+        self.sbreak = set()
     def __missing__(self,k):
         return 0
     def load(self,width,baseaddr):
@@ -47,12 +48,12 @@ class Memory(dict):
         :param width:
         :return:
         """
-        if baseaddr in self.membreak:
-            print("Memory breakpoint")
-            print(f"mem[0x{baseaddr:08x}]<-0x{value:0{width * 2}x}")
-            pass
+        print(f"mem[0x{baseaddr:08x}]<-0x{value:0{width * 2}x}")
         for ofs in range(width):
             self[baseaddr+ofs]= read_bitfield(value, ofs * 8 + 7, ofs * 8)
+        if baseaddr in self.sbreak:
+            print("Memory breakpoint")
+            raise StopIteration()
     def stuff_hex(self, hexfn:str=None, hexf: io.TextIOBase =None):
         """
         Load an Intel Hex file into memory
