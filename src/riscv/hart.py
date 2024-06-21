@@ -315,7 +315,10 @@ class Hart:
             if type(handler) is str:
                 raise ValueError(f"Unimplemented instruction {handler}")
             print(f"{self.pc:08x} -- {ins:0{length*2}x}      {handler.disasm(fields, self.XLEN)}  # {handler.formula(fields, self.XLEN)}")
-            handler.execute(fields,self)
+            try:
+                handler.execute(fields,self)
+            except RVException as e:
+                trap(self,e)
             if not self._pc_changed:
                 self.pc += length
         else:
