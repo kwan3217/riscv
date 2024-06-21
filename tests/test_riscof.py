@@ -111,6 +111,7 @@ from riscv.hart import Hart
 from riscv.rv32c import RV32C
 from riscv.rv32i import RV32I
 from riscv.spike import spike_sig, check_sig
+from riscv.zicsr import Zicsr
 
 
 @pytest.mark.parametrize(
@@ -130,9 +131,12 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000,breakpoints:set=N
     :return:
     """
     elffn=f"riscof_work/rv32i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
-    #hart = Hart((RV32I(), Zicsr(),RV32C()))
-    hart = Hart((RV32I(), RV32C()),breakpoints=breakpoints)
-    hart.mem.membreak={0x8000_4024}
+    hart = Hart((RV32I(), RV32C(), Zicsr()),breakpoints=breakpoints)
+    hart.csr['misa']=((1 << 30) | # 32-bit XLEN
+                      (1 <<  8) | # I, integer base extension
+                      (1 <<  2) ) # C, compressed instruction extension
+    if mbreak is not None:
+        hart.mem.sbreak=mbreak
     syms=hart.mem.stuff_elf(elffn)
     hart.halts.add(syms["exit_cleanup"])
     for sym,addr in syms.items():
@@ -140,7 +144,7 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000,breakpoints:set=N
     hart.pc = syms["rvtest_entry_point"]
     cycles=0
     while cycles<max_cycles:
-        hart.dump()
+        #hart.dump()
         try:
             hart.exec_one()
         except StopIteration:
