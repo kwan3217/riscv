@@ -130,10 +130,21 @@ class RVException(Exception):
     and then stuff the pc with the value from the correct CSR. It can
     then let the emulated hart continue to run.
     """
-    def __init__(self,*,message:str=None,is_interrupt:bool,cause:int):
+    def __init__(self,*,message:str=None,is_interrupt:bool,cause:int,epc:int,mtval:int=0):
         super().__init__(message)
         self.is_interrupt=is_interrupt
         self.cause=cause
+        self.epc=epc
+        self.mtval=mtval
+    def __str__(self):
+        try:
+            if self.is_interrupt:
+                cause=repr(IntCause(self.cause))
+            else:
+                cause=repr(ExcCause(self.cause))
+        except Exception:
+            cause=f"Unknown cause {self.cause}"
+        return f"{self.args[0]} at pc=0x{self.epc:08x}, {'interrupt' if self.is_interrupt else 'exception'} {cause=}"
 
 
 class IllegalInstruction(RVException):
