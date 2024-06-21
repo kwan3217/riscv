@@ -93,7 +93,7 @@ class IntCause(Enum):
     # >=16 are reserved for plaform use (IE won't be used by future standards)
 
 
-class ExcCause(Exception):
+class ExcCause(Enum):
     INSTRUCTION_ADDRESS_MISALIGNED=0
     INSTRUCTION_ACCESS_FAULT=1
     ILLEGAL_INSTRUCTION=2
