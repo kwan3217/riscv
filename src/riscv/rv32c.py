@@ -71,7 +71,7 @@ from dataclasses import dataclass
 from typing import Callable, Mapping, Iterable
 
 from riscv.hart import InstructionSet, Hart, WrongInterpreter, InstructionHandler, \
-    IllegalInstruction
+    IllegalInstruction, ExcCause, RVException
 from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
 
 
@@ -269,17 +269,8 @@ class RV32C(InstructionSet):
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}+={self.abi_regnames[p['rs2']][self.nameidx]}"
     class C_EBREAK(InstructionHandler):
-        """
-        Execute C.EBREAK, C.JALR, or C.ADD. These all
-        have the same opcode and funct bits, so they
-        are only distinguishable by their register operands:
-        * C.JALR - rs1/rd!=0, rs2==0. If we would source an add
-          from x0, then this is a JALR instead
-        * C.EBREAK - If this would both source and write to x0,
-          then this is an EBREAK instead.
-        """
         def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            raise StopIteration(f"C.EBREAK")
+            raise RVException(message=f"C.EBREAK",epc=hart.pc,is_interrupt=False,cause=ExcCause.BREAKPOINT.value,mtval=hart.pc)
         def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
             return "C.EBREAK"
         def formula(self, p: Mapping[str,int], XLEN: int):
