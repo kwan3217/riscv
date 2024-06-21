@@ -98,10 +98,10 @@ csrnames = {
     0x320:("MRW","mcountinhibit","Machine counter-inhibit register"),}|{
     0x320+x:("MRW", f"mhpmevent{x}", "Machine performance-monitoring event selector") for x in range(3, 32)}|{
     #  Debug/Trace Registers (shared with Debug Mode)
-    0x7A0:("MRW","tselect Debug/Trace trigger register select"),
-    0x7A1:("MRW","tdata1 First Debug/Trace trigger data register"),
-    0x7A2:("MRW","tdata2 Second Debug/Trace trigger data register"),
-    0x7A3:("MRW","tdata3 Third Debug/Trace trigger data register"),
+    0x7A0:("MRW","tselect","Debug/Trace trigger register select"),
+    0x7A1:("MRW","tdata1","First Debug/Trace trigger data register"),
+    0x7A2:("MRW","tdata2","Second Debug/Trace trigger data register"),
+    0x7A3:("MRW","tdata3","Third Debug/Trace trigger data register"),
     #  Debug Mode Registers
     0x7B0:("DRW","dcsr","Debug control and status register"),
     0x7B1:("DRW","dpc","Debug PC"),
@@ -109,19 +109,32 @@ csrnames = {
     0x7B3:("DRW","dscratch1","Debug scratch register 1"),}
 
 
+csrname_index={name:i for i,(access,name,comment) in csrnames.items()}
+
+
 class CSR(Memory):
     def __getitem__(self,key):
+        if type(key)==str:
+            try:
+                key=csrname_index[key]
+            except IndexError:
+                raise IndexError(f"CSR name {key} not found")
         if key not in csrnames:
             raise IllegalInstruction(f"Tried to read CSR[0x{key:03x}] which doesn't exist")
         if key not in self:
             super().__setitem__(key,0)
         value=super().__getitem__(key)
-        print(f"Read  CSR[0x{key:03x}{' ('+csrnames[key][1]+')' if key in csrnames else ''}], value=0x{value:08x}  {' # '+csrnames[key][2] if key in csrnames else ''}")
+        print(f"  CSR[0x{key:03x}{' ('+csrnames[key][1]+')' if key in csrnames else ''}]->value=0x{value:08x}  {' # '+csrnames[key][2] if key in csrnames else ''}")
         return value
     def __setitem__(self,key,value):
+        if type(key)==str:
+            try:
+                key=csrname_index[key]
+            except IndexError:
+                raise IndexError(f"CSR name {key} not found")
         if key not in csrnames:
             raise IllegalInstruction(f"Tried to write to CSR[0x{key:03x}] which doesn't exist")
-        print(f"Write CSR[0x{key:03x}{' ('+csrnames[key][1]+')' if key in csrnames else ''}], value=0x{value:08x} {' # '+csrnames[key][2] if key in csrnames else ''}")
+        print(f"  CSR[0x{key:03x}{' ('+csrnames[key][1]+')' if key in csrnames else ''}]<-value=0x{value:08x} {' # '+csrnames[key][2] if key in csrnames else ''}")
         value=super().__setitem__(key,value)
 
 
