@@ -9,6 +9,7 @@ from typing import Iterable, Mapping
 from riscv.bits import bitmask, read_bitfield, sign_extend, signed
 from riscv.decode import compile_encodings, decode
 from riscv.memory import Memory
+from riscv.priv import trap
 
 
 def main():
