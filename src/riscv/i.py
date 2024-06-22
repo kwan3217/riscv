@@ -1,5 +1,7 @@
 """
-Implement the Risc-V 32-bit integer base instructions
+Implement the Risc-V integer base instructions. Any instructions
+which are 32-bit only go in i32. Any which only work on 64-bit
+or longer go in i64 or i128, respectively.
 
 Created: 6/11/24
 """
@@ -7,8 +9,8 @@ from dataclasses import dataclass
 from typing import Callable, Mapping
 
 import riscv.bits
-from riscv.hart import InstructionSet, Hart, InstructionHandler, Opcode, WrongInterpreter
-from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
+from riscv.hart import InstructionSet, Hart, InstructionHandler
+from riscv.bits import bitmask, read_bitfield, signed
 
 
 class I(InstructionSet):
