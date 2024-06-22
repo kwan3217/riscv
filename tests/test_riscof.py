@@ -173,6 +173,8 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
         cycles+=1
     assert cycles<max_cycles,"Hit maximum cycles"
     # Check signature
-    sig=spike_sig(elffn)
-    assert check_sig(hart.mem, sig),"Bad signature"
+    sig=spike_sig(elffn,XLEN=XLEN)
+    pass_sig=check_sig(hart.mem, sig, XLEN=XLEN)
+    if not pass_sig:
+        raise AssertionError("Bad signature")
 
