@@ -39,7 +39,10 @@ class Memory(dict):
             except KeyError:
                 b=0
             result |= b<<(ofs*8)
-        #print(f"mem[0x{baseaddr:08x}]->0x{result:0{width * 2}x}")
+        if baseaddr in self.lbreak:
+            print("Memory breakpoint")
+            print(f"mem[0x{baseaddr:08x}]->0x{result:0{width * 2}x}")
+            raise StopIteration()
         return result
     def store(self,width,baseaddr,value):
         """
@@ -76,7 +79,7 @@ class Memory(dict):
                 if addr0+i+j<addr1:
                     if addr0 + i + j not in self:
                         val = '_'
-                    elif self[addr0+i+j]>=32 and self[addr0+i+j]<=127:
+                    elif 32<=self[addr0+i+j]<=127:
                         val=chr(self[addr0+i+j])
                     else:
                         val='.'
