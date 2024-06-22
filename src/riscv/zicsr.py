@@ -6,19 +6,9 @@ Created: 6/11/24
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-from riscv.hart import InstructionSet, Hart, InstructionHandler, WrongInterpreter, \
+from riscv.hart import InstructionSet, Hart, InstructionHandler, \
     IllegalInstruction
 from riscv.memory import Memory
-from riscv.bits import read_bitfield, read_bitfields
-from riscv.rv32i import ParsedInstruction, I
-
-
-def decode(ins: int) -> ParsedInstruction:
-    return ParsedInstruction(opcode=read_bitfield(ins, 6, 0),
-                             rd=read_bitfield(ins, 11, 7),
-                             funct3=read_bitfield(ins, 14, 12),
-                             rs1=read_bitfield(ins, 19, 15),
-                             imm=read_bitfields(ins, ((31, 20, 0),), 12, False))
 
 
 # This is literally copied, pasted, and reformatted from privisa Table 2.2
@@ -186,7 +176,6 @@ class Zicsr(InstructionSet):
           not trigger an exception.
         """
         def __init__(self,name:str,symbol:str,op:Callable[[int,int],int]):
-            self.format = I
             self.name=name
             self.symbol=symbol
             self.op=op
@@ -262,7 +251,6 @@ class Zicsr(InstructionSet):
         a 5-bit unsigned immediate instead of a register number.
         """
         def __init__(self,name:str,symbol:str,op:Callable[[int,int],int]):
-            self.format = I
             self.name=name
             self.symbol=symbol
             self.op=op
