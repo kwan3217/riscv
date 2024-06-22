@@ -211,7 +211,7 @@ class I(InstructionSet):
             return self.comment
     #        opcode  Funct3  Funct7
     ins_exec={
-        "xVUTSRQPONMLKJIHGFEDC    ddddd _||_|||":LUI(),
+        "-VUTSRQPONMLKJIHGFEDC    ddddd _||_|||":LUI(),
         "-VUTSRQPONMLKJIHGFEDC    ddddd __|_|||":AUIPC(),
         "-KA987654321BJIHGFEDC    ddddd ||_||||":JAL(),
         " BA9876543210  lllll ___ ddddd ||__|||":JALR(),
