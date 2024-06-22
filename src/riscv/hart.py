@@ -14,7 +14,7 @@ from riscv.priv import trap
 
 def main():
     from test_riscof import test_riscof
-    test_riscof("C","cebreak")
+    test_riscof(64,"I","add")
 
 
 if __name__ == "__main__":
