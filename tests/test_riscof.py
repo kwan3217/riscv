@@ -100,6 +100,25 @@ make install # Don't need sudo since installing locally
 export PATH=$PATH:/full/path/to/riscv-isa-sim
 ```
 
+Set up the env files for the Spike emulator
+
+```
+riscof setup --dutname=spike
+```
+
+Change the config.ini so that both the reference and DUT
+are Spike. The checked-in config.ini does this.
+
+Get the architectural tests
+
+```
+riscof --verbose info arch-tests --clone
+```
+
+Generate the list of tests. We will generate as many tests
+as possible, and select which ones we actually run at a
+later time.
+
 
 """
 from glob import glob
@@ -116,11 +135,12 @@ from riscv.zicsr import Zicsr
 
 
 @pytest.mark.parametrize(
-    "extname,testname",
-    [("C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
-    [("I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]
+    "XLEN,extname,testname",
+    [(32,"C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
+    [(32,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]+
+    [(64,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]
 )
-def test_riscof(extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,mbreak:set=None):
+def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,mbreak:set=None):
     """
     Execute the riscof test cases
 
@@ -131,11 +151,8 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000,breakpoints:set=N
     :param max_cycles:
     :return:
     """
-    elffn=f"riscof_work/rv32i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
-    hart = Hart((RV32I(), RV32C(), Zicsr()),breakpoints=breakpoints)
-    hart.csr['misa']=((1 << 30) | # 32-bit XLEN
-                      (1 <<  8) | # I, integer base extension
-                      (1 <<  2) ) # C, compressed instruction extension
+    elffn=f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
+    hart = Hart((RV32I(), RV32C(), Zicsr()),XLEN=XLEN,breakpoints=breakpoints)
     if mbreak is not None:
         hart.mem.sbreak=mbreak
     hart.mem.stuff(read_elf(elffn))

@@ -142,6 +142,14 @@ class Zicsr(InstructionSet):
     """
     def add_state(self,hart:Hart):
         hart.csr=CSR()
+        if hart.XLEN==32:
+            xlen_enc=1
+        elif hart.XLEN==64:
+            xlen_enc=2
+        elif hart.XLEN==128:
+            xlen_enc=3
+        hart.csr['misa'] = xlen_enc << 30
+
     class xRET(InstructionHandler):
         """
         Return to a different privilege level. For now we just
