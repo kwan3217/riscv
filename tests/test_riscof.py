@@ -141,7 +141,7 @@ from riscv.zicsr import Zicsr
     [(32,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]+
     [(64,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]
 )
-def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,mbreak:set=None):
+def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,sbreak:set=None):
     """
     Execute the riscof test cases
 
@@ -154,8 +154,8 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     """
     elffn=f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
     hart = Hart((I(), I64(), RV32C(), Zicsr()),XLEN=XLEN,breakpoints=breakpoints)
-    if mbreak is not None:
-        hart.mem.sbreak=mbreak
+    if sbreak is not None:
+        hart.mem.sbreak=sbreak
     hart.mem.stuff(read_elf(elffn))
     syms=read_syms(elffn)
     hart.halts.add(syms["exit_cleanup"])
