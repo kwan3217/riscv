@@ -111,7 +111,7 @@ from elf import read_elf, read_syms
 from riscv.hart import Hart
 from riscv.rv32c import RV32C
 from riscv.rv32i import RV32I
-from riscv.spike import spike_sig, check_sig
+from spike import spike_sig, check_sig
 from riscv.zicsr import Zicsr
 
 
