@@ -107,6 +107,7 @@ from os.path import basename
 
 import pytest
 
+from elf import read_elf, read_syms
 from riscv.hart import Hart
 from riscv.rv32c import RV32C
 from riscv.rv32i import RV32I
@@ -137,7 +138,8 @@ def test_riscof(extname:str,testname:str,max_cycles:int=100000,breakpoints:set=N
                       (1 <<  2) ) # C, compressed instruction extension
     if mbreak is not None:
         hart.mem.sbreak=mbreak
-    syms=hart.mem.stuff_elf(elffn)
+    hart.mem.stuff(read_elf(elffn))
+    syms=read_syms(elffn)
     hart.halts.add(syms["exit_cleanup"])
     for sym,addr in syms.items():
         print(f"{sym:32s}0x{addr:08x}")
