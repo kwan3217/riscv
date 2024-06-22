@@ -135,7 +135,7 @@ class I(InstructionSet):
         An instruction which acts on a register and an immediate.
         """
 
-        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
+        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int], *,w:int=None):
             """
             Define a specific instruction
 
@@ -154,12 +154,20 @@ class I(InstructionSet):
                        current XLEN. Note that it is passed *values*, not register references.
                        The values are passed as unsigned integers, but can be converted to
                        signed using the XLEN from the hart.
+            :param w: If set, truncate the result to this many bits, and sign-extend the
+                      result to XLEN. For instance, the ADDIW instruction in the RV64I set
+                      does the ADDI operation, but truncates the result to 32 bits and fills
+                      in the upper 32 bits with the sign bit (bit 31).
             """
             self.name = name
             self.symbol = symbol
             self.op = op
+            self.w=w
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             result = self.op(hart, hart.x[p['rs1']], p['imm'])
+            if self.w is not None:
+                result=result & ((1<<self.w)-1) # Truncate to given bit width
+                result=hart.sign_extend(result,self.w-1)
             hart.x[p['rd']] = result
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"{self.name:7s}x{p['rd']:2},x{p['rs1']:2},{p['imm']:12}"
@@ -175,12 +183,16 @@ class I(InstructionSet):
             else:
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs1']][self.nameidx]}{this_symbol}{p['imm']}"
     class RegReg(InstructionHandler):
-        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int]):
+        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int],*,w:int=None):
             self.name = name
             self.symbol = symbol
             self.op = op
+            self.w=w
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             result = self.op(hart, hart.x[p['rs1']], hart.x[p['rs2']])
+            if self.w is not None:
+                result=result & ((1<<self.w)-1) # Truncate to given bit width
+                result=hart.sign_extend(result,self.w-1)
             hart.x[p['rd']] = result
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"{self.name:7s}x{p['rd']:2},x{p['rs1']:2},x{p['rs2']:2}"
