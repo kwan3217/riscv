@@ -1,0 +1,28 @@
+"""
+Implement the Risc-V 64-bit integer base instructions.
+Any instructions in the I extention which work on more than 32 bits,
+or only for 64 bits, go here. Anything which works only on longer
+than 64 bits goes in i128.
+
+Created: 6/22/24
+"""
+from dataclasses import dataclass
+from typing import Callable, Mapping
+
+import riscv.bits
+from riscv.hart import InstructionSet, Hart, InstructionHandler
+from riscv.bits import bitmask, read_bitfield, signed
+from riscv.i import I
+
+
+class I64(I):
+    ins_exec={
+        " BA9876543210  lllll _|| ddddd _____||":I.Load('LD',size=8,signed=True),
+        " BA98765 zzzzz lllll _|| 43210 _|___||":I.Store('SD',size=8),
+        "+______5 43210 lllll __| ddddd __|__||":I.RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),
+
+    }
+    def get_decode_table(self):
+        return self.ins_exec
+
+
