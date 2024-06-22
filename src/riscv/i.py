@@ -11,7 +11,7 @@ from riscv.hart import InstructionSet, Hart, InstructionHandler, Opcode, WrongIn
 from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
 
 
-class RV32I(InstructionSet):
+class I(InstructionSet):
     class LUI(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             hart.x[p["rd"]] = p["imm"]
@@ -65,9 +65,9 @@ class RV32I(InstructionSet):
             self.size=size
             self.signed=signed
             if self.signed:
-                self.cast=(None,"i8","i16",None,"i32")[self.size]
+                self.cast=f"i{self.size*8}"
             else:
-                self.cast=(None,"u8","u16",None,"u32")[self.size]
+                self.cast=f"u{self.size*8}"
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             addr = hart.x[p['rs1']]  # base
             addr += signed(p['imm'], 12)
@@ -83,7 +83,7 @@ class RV32I(InstructionSet):
         def __init__(self,name:str,size:int):
             self.name=name
             self.size=size
-            self.cast=(None,"b8","b16",None,"b32")[self.size]
+            self.cast=f"b{self.size*8}"
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             addr = hart.x[p['rs1']]  # base
             addr += p['imm']
@@ -101,7 +101,7 @@ class RV32I(InstructionSet):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             if self.condition(hart, hart.x[p['rs1']], hart.x[p['rs2']]):
                 target = hart.pc
-                target += signed(p['imm'], 12)
+                target += p['imm']
                 hart.pc = target
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"{self.name:7s}x{p['rs1']:2},x{p['rs2']:2},{p['imm']:12}"
@@ -233,11 +233,11 @@ class RV32I(InstructionSet):
         "xBA9876543210  lllll |__ ddddd __|__||":RegImmed("XORI", "^", lambda hart, rs1, imm: rs1 ^ imm),
         "xBA9876543210  lllll ||_ ddddd __|__||":RegImmed("ORI", "|", lambda hart, rs1, imm: rs1 | imm),
         "xBA9876543210  lllll ||| ddddd __|__||":RegImmed("ANDI", "&", lambda hart, rs1, imm: rs1 & imm),
-        "+_______ 43210 lllll __| ddddd __|__||":RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << (imm & 0x1f)),
+        "+_______ 43210 lllll __| ddddd __|__||":RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),
                 # I can never remember whether which of >> or >>> is logical and
                 # which is arithmetic, so I stick a letter in the middle of the
                 # symbol instead.
-        "+_______ 43210 lllll |_| ddddd __|__||":RegImmed("SRLI", ">L>", lambda hart, rs1, imm: rs1 >> (imm & 0x1f)),
+        "+_______ 43210 lllll |_| ddddd __|__||":RegImmed("SRLI", ">L>", lambda hart, rs1, imm: rs1 >> imm),
         "+_|_____ 43210 lllll |_| ddddd __|__||":RegImmed("SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> read_bitfield(imm, 4, 0)),
         " _______ zzzzz lllll ___ ddddd _||__||":RegReg("ADD", "+", lambda hart, rs1, rs2: rs1 + rs2),
         " _|_____ zzzzz lllll ___ ddddd _||__||":RegReg("SUB", "-", lambda hart, rs1, rs2: rs1 - rs2),
