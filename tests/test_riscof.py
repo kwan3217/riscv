@@ -128,8 +128,9 @@ import pytest
 
 from elf import read_elf, read_syms
 from riscv.hart import Hart
+from riscv.i64 import I64
 from riscv.rv32c import RV32C
-from riscv.rv32i import RV32I
+from riscv.i import I
 from spike import spike_sig, check_sig
 from riscv.zicsr import Zicsr
 
@@ -152,7 +153,7 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     :return:
     """
     elffn=f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
-    hart = Hart((RV32I(), RV32C(), Zicsr()),XLEN=XLEN,breakpoints=breakpoints)
+    hart = Hart((I(), I64(), RV32C(), Zicsr()),XLEN=XLEN,breakpoints=breakpoints)
     if mbreak is not None:
         hart.mem.sbreak=mbreak
     hart.mem.stuff(read_elf(elffn))
