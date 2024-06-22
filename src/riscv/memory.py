@@ -42,7 +42,6 @@ class Memory(dict):
         if baseaddr in self.lbreak:
             print("Memory breakpoint")
             print(f"mem[0x{baseaddr:08x}]->0x{result:0{width * 2}x}")
-            raise StopIteration()
         return result
     def store(self,width,baseaddr,value):
         """
@@ -56,7 +55,6 @@ class Memory(dict):
             self[baseaddr+ofs]= read_bitfield(value, ofs * 8 + 7, ofs * 8)
         if baseaddr in self.sbreak:
             print("Memory breakpoint")
-            raise StopIteration()
     def stuff(self, data:dict[int,int]):
         for addr,b in data.items():
             self[addr]=b
