@@ -14,7 +14,7 @@ from riscv.priv import trap
 
 def main():
     from test_riscof import test_riscof
-    test_riscof(64,"I","add")
+    test_riscof(64,"I","add",breakpoints={0x8000_041c})
 
 
 if __name__ == "__main__":
@@ -311,7 +311,7 @@ class Hart:
         if self.pc in self.halts:
             raise StopIteration(f"Hit halt at pc=0x{self.pc:08x}")
         length,ins=self.fetch()
-        fields,handler=decode(ins, self.decode_table)
+        fields,handler=decode(ins, self.decode_table,XLEN=self.XLEN)
         if handler is not None:
             if type(handler) is str:
                 raise ValueError(f"Unimplemented instruction {handler}")

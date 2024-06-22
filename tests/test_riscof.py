@@ -164,7 +164,7 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     hart.pc = syms["rvtest_entry_point"]
     cycles=0
     while cycles<max_cycles:
-        #hart.dump()
+        hart.dump()
         try:
             hart.exec_one()
         except StopIteration:
