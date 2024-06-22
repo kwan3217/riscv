@@ -11,7 +11,7 @@ from elf import read_syms
 Signature=Mapping[int,int]
 
 
-def spike_sig(elffn:str)->Signature:
+def spike_sig(elffn:str,XLEN=32)->Signature:
     """
     Use spike emulator to run a test case. This will generate
     a signature which can be compared to the signature which
@@ -19,7 +19,7 @@ def spike_sig(elffn:str)->Signature:
 
     :param elffn: Name of ELF which holds the test case
     :return: Signature, in the form of a dict. The key is the address,
-             and the value is the 32-bit value that was at the given
+             and the value is the XLEN-bit value that was at the given
              address after the spike emulator finished.
     """
     parts=elffn.split(".")
@@ -29,29 +29,29 @@ def spike_sig(elffn:str)->Signature:
     sigfn='.'.join(parts)
     syms=read_syms(elffn)
     # Set up a run command for running the program with Spike to generate a signature.
-    sigaddrs=range(syms['begin_signature'],syms['end_signature'],4)
+    sigaddrs=range(syms['begin_signature'],syms['end_signature'],XLEN//8)
     with open(spikefn,"wt") as ouf:
         print(f"until pc 0 {syms['exit_cleanup']:08x}",file=ouf)
         for addr in sigaddrs:
             print(f"mem {addr:08x}",file=ouf)
         print(f"q",file=ouf)
     # Run spike and get the signature
-    cmdline=f"spike -d --debug-cmd={spikefn} --isa=RV32IC --pc=0x{syms['rvtest_entry_point']:08x} {elffn} 2>&1 | tee {sigfn}"
+    cmdline=f"spike -d --debug-cmd={spikefn} --isa=RV{XLEN}IC --pc=0x{syms['rvtest_entry_point']:08x} {elffn} 2>&1 | tee {sigfn}"
     result=run(cmdline,capture_output=True, shell=True)
     # Read signature. Signature is in the form of 32-bit memory reads, with implied
     # addresses from the begin_signature symbol up to but excluding end_signature.
     sig={}
     siglines=str(result.stdout,encoding='utf8').split("\n")
     for addr,line in zip(sigaddrs,siglines):
-        sig[addr]=int(line[2:10],16)
+        sig[addr]=int(line[2:],16)
     return sig
 
 
-def check_sig(mem:'Memory', sig:Signature):
+def check_sig(mem:'Memory', sig:Signature, XLEN:int=32):
     some_bad=False
     for addr,ref in sig.items():
-        dut=mem.load(4,addr)
-        addrdump=f"addr=0x{addr:08x}, ref=0x{ref:08x}, dut=0x{dut:08x}{'*' if ref!=dut else ''}"
+        dut=mem.load(XLEN//8,addr)
+        addrdump=f"addr=0x{addr:0{XLEN//4}x}, ref=0x{ref:0{XLEN//4}x}, dut=0x{dut:0{XLEN//4}x}{'*' if ref!=dut else ''}"
         print(addrdump)
         if ref!=dut:
             some_bad=True
