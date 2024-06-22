@@ -178,7 +178,7 @@ def decide(ins:int,compiled_descs:compiled_encodings)->compiled_encoding_bitmask
     return best_mask
 
 
-def decode(ins:int,compiled_descs:compiled_encodings,XLEN:int=32)->tuple[Mapping[str,int],'InstructionHandler']:
+def decode(ins:int,compiled_descs:compiled_encodings,XLEN:int)->tuple[Mapping[str,int],'InstructionHandler']:
     """
 
     :param ins:
