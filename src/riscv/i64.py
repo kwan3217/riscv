@@ -24,7 +24,9 @@ class I64(I):
         "+______5 43210 lllll |_| ddddd __|__||":I.RegImmed("SRLI", ">L>", lambda hart, rs1, imm: rs1 >> imm),
         "+_|____5 43210 lllll |_| ddddd __|__||":I.RegImmed("SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> imm),
         "-BA9876543210  lllll ___ ddddd __||_||":I.RegImmed("ADDIW", "i32(%s+%s)", lambda hart, rs1, imm: rs1 + imm,w=32),
-        " _______ zzzzz lllll ___ ddddd _|||_||":I.RegReg("ADDW", "+", lambda hart, rs1, rs2: rs1 + rs2,w=32),
+        "+_______ 43210 lllll |_| ddddd __||_||":I.RegImmed("SRLIW", "u32(b32(%s)>L>%s)", lambda hart, rs1, imm: (rs1&0xFFFFFFFF) >> imm,w=32),
+        "+_|_____ 43210 lllll |_| ddddd __||_||":I.RegImmed("SRAIW", "i32(i32(%s)>A>%s)", lambda hart, rs1, imm: signed(rs1&0xFFFFFFFF,31) >> imm,w=32),
+        " _______ zzzzz lllll ___ ddddd _|||_||":I.RegReg("ADDW", "i32(%s+%s)", lambda hart, rs1, rs2: rs1 + rs2,w=32),
 
     }
     def get_decode_table(self):
