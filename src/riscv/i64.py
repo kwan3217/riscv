@@ -17,6 +17,7 @@ from riscv.i import I
 
 class I64(I):
     ins_exec={
+        "-BA9876543210  lllll ||_ ddddd _____||":I.Load('LWU',size=4,signed=False),
         "-BA9876543210  lllll _|| ddddd _____||":I.Load('LD',size=8,signed=True),
         "-BA98765 zzzzz lllll _|| 43210 _|___||":I.Store('SD',size=8),
         "+______5 43210 lllll __| ddddd __|__||":I.RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),
