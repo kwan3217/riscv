@@ -22,6 +22,7 @@ class I64(I):
         "-BA98765 zzzzz lllll _|| 43210 _|___||":I.Store('SD',size=8),
         "+______5 43210 lllll __| ddddd __|__||":I.RegImmed("SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),
         "+______5 43210 lllll |_| ddddd __|__||":I.RegImmed("SRLI", ">L>", lambda hart, rs1, imm: rs1 >> imm),
+        "+_|____5 43210 lllll |_| ddddd __|__||":I.RegImmed("SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> imm),
         "-BA9876543210  lllll ___ ddddd __||_||":I.RegImmed("ADDIW", "i32(%s+%s)", lambda hart, rs1, imm: rs1 + imm,w=32),
         " _______ zzzzz lllll ___ ddddd _|||_||":I.RegReg("ADDW", "+", lambda hart, rs1, rs2: rs1 + rs2,w=32),
 
