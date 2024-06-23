@@ -28,6 +28,10 @@ class I64(I):
         "+_______ 43210 lllll |_| ddddd __||_||":I.RegImmed("SRLIW", "u32(b32(%s)>L>%s)", lambda hart, rs1, imm: (rs1&0xFFFFFFFF) >> imm,w=32),
         "+_|_____ 43210 lllll |_| ddddd __||_||":I.RegImmed("SRAIW", "i32(i32(%s)>A>%s)", lambda hart, rs1, imm: signed(rs1&0xFFFFFFFF,31) >> imm,w=32),
         " _______ zzzzz lllll ___ ddddd _|||_||":I.RegReg("ADDW", "i32(%s+%s)", lambda hart, rs1, rs2: rs1 + rs2,w=32),
+        " _|_____ zzzzz lllll ___ ddddd _|||_||":I.RegReg("SUBW", "i32(%s-%s)", lambda hart, rs1, rs2: rs1 - rs2,w=32),
+        "+_______ zzzzz lllll __| ddddd _|||_||":I.RegReg("SLLW", "u32(b32(%s)<<%s)", lambda hart, rs1, rs2: (rs1&0xFFFFFFFF) << read_bitfield(rs2, 4, 0),w=32),
+        "+_______ zzzzz lllll |_| ddddd _|||_||":I.RegReg("SRLW", "u32(b32(%s)>L>%s)", lambda hart, rs1, rs2: (rs1&0xFFFFFFFF) >> read_bitfield(rs2, 4, 0),w=32),
+        "+_|_____ zzzzz lllll |_| ddddd _|||_||":I.RegReg("SRAW", "i32(i32(%s)>A>%s)", lambda hart, rs1, rs2: signed(rs1&0xFFFFFFFF,31) >> read_bitfield(rs2, 4, 0),w=32),
 
     }
     def get_decode_table(self):
