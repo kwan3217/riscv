@@ -259,6 +259,12 @@ class Hart:
             halts=set()
         self.halts=halts
         self.XLEN=XLEN
+        if self.XLEN<=32:
+            self.xbits=5
+        elif 32<self.XLEN<=64:
+            self.xbits=6
+        else:
+            self.xbits=7
         self.mem=mem
         self._pc=0
         self._pc_changed=False
@@ -324,7 +330,7 @@ class Hart:
                 self.pc += length
         else:
             if read_bitfield(ins, 1, 0)==0b11:
-                from riscv.rv32i import I
+                from riscv.i import I
                 raise IllegalInstruction(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")
             else:
                 raise IllegalInstruction(f"At pc=0x{self.pc:08x}, unhandled compressed instruction "
