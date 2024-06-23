@@ -137,9 +137,9 @@ from riscv.zicsr import Zicsr
 
 @pytest.mark.parametrize(
     "XLEN,extname,testname",
-    [(32,"C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
+    list(reversed([(32,"C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
     [(32,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]+
-    [(64,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]
+    [(64,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]))
 )
 def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,sbreak:set=None):
     """
