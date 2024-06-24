@@ -112,22 +112,24 @@ class C(InstructionSet):
             return f"C.ANDI   x{p['rd']:2d},0x{p['imm']:08x}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}&=0x{p['imm']:08x}"
-    class C_SWSP(InstructionHandler):
+    class C_StoreSP(InstructionHandler):
         """
         "C.SWSP stores a 32-bit value in register rs2 to memory. It
         computes an effective address by adding the zero-extended offset,
         scaled by 4 [scaled by the decoder, so don't do it here], to the
         stack pointer, x2. It expands to `sw rs2, offset[7:2](x2)`.
         """
+        def __init__(self,name:str,*,size:int=4):
+            self.name=name
+            self.size=size
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             addr = hart.x[2]  # base
             addr += p['imm']
-            size = 4
-            hart.mem.store(size, addr, hart.x[p['rs2']])
+            hart.mem.store(self.size, addr, hart.x[p['rs2']])
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"C.SWSP   x{p['rs2']:2},{p['imm']:15}"
+            return f"{self.name:9s}x{p['rs2']:2},{p['imm']:15}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p['imm']) if p['imm']!=0 else ''}]=b32({self.abi_regnames[p['rs2']][self.nameidx]})"
+            return f"mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p['imm']) if p['imm']!=0 else ''}]=b{self.size*8}({self.abi_regnames[p['rs2']][self.nameidx]})"
     class C_LW(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             size = 4
@@ -151,17 +153,18 @@ class C(InstructionSet):
             return f"C.SW r{p['rs1']:2},r{p['rs2']:2},{p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"b32(mem[{self.abi_regnames[p['rs1']][self.nameidx]}{'+'+str(p['imm']) if p['imm']>0 else ''}])={self.abi_regnames[p['rs2']][self.nameidx]}"
-    class C_LWSP(InstructionHandler):
+    class C_LoadSP(InstructionHandler):
+        def __init__(self,name:str,*,size:int=4):
+            self.name=name
+            self.size=size
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            size = 4
             addr = hart.x[2]  # base
             addr += p['imm']
-            val = hart.mem.load(size, addr)
-            # Note that this expands to an rv32i LW, not an rv64i LWU, so it always sign-extends.
-            val = signed(val, size * 8 - 1)
+            val = hart.mem.load(self.size, addr)
+            val = signed(val, self.size * 8 - 1)
             hart.x[p['rd']] = val
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"C.LWSP   x{p['rd']:2},{p['imm']:15}"
+            return f"{self.name:9s}x{p['rd']:2},{p['imm']:15}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=i32(mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p['imm']) if p['imm']>0 else ''}])"
     class C_MV(InstructionHandler):
@@ -417,10 +420,9 @@ class C(InstructionSet):
         "+___ _ fffff _____ |_": C_NOP("C.HINT_SLLI 64"),  # C.SLLI rd,64 on C128I, hint on C32/64I
         "+__| 5 ddddd 43876 |_": None,  # C.FLDSP, C32/64F
         "+__| 5 ddddd 49876 |_": None,  # C.LQSP, C128I
-        "+_|_ 5 ddddd 43276 |_": C_LWSP(),
+        "+_|_ 5 ddddd 43276 |_": C_LoadSP("C.LWSP",size=4),
         " _|_ 5 _____ 43276 |_": None,  # Reserved, equivalent to C.LWSP x0,imm
         "+_|| 5 ddddd 43276 |_": None,  # C.FLWSP
-        "+_|| 5 ddddd 43876 |_": None,  # C.LDSP, C64/128I
         " _|| 5 _____ 43876 |_": None,  # Reserved, equivalent to C.LDSP x0,imm
         " |__ _ lllll _____ |_": C_JR(),  # Encoding that C.MV rd=x0 *would* have
         " |__ _ _____ _____ |_": None,  # Reserved, equivalent to C.JR x0
@@ -432,9 +434,8 @@ class C(InstructionSet):
         " |__ | _____ zzzzz |_": C_NOP("C.HINT_ADD rd=x0"),  # Encoding that C.ADD x0,rs2 *would* have
         "+|_| 543876 zzzzz |_": None,  # C.FSDSP, CF
         "+|_| 549876 zzzzz |_": None,  # C.SQSP, C128I
-        "+||_ 543276 zzzzz |_": C_SWSP(), # Zero-extended immediate
+        "+||_ 543276 zzzzz |_": C_StoreSP("C.SWSP",size=4), # Zero-extended immediate
         "+||| 543276 zzzzz |_": None,  # C.FSWSP, C32F
-        "+||| 543876 zzzzz |_": None,  # C.SDSP, C64/128F
     }
 
 
