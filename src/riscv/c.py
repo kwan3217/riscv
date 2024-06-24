@@ -178,17 +178,6 @@ class C(InstructionSet):
             return f"C.JR   x{p['rs1']:2}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"pc={self.abi_regnames[p['rs1']][self.nameidx]}"
-    class C_JAL(InstructionHandler):
-        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            hart.x[1] = hart.pc+2
-            target = hart.pc
-            target += p['imm']
-            target &= bitmask(31, 1)
-            hart.pc = target
-        def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"C.JAL    {p['imm']:12}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.abi_regnames[1][self.nameidx]}=pc+2, pc=pc{'+' if p['imm'] >= 0 else ''}{p['imm']}"
     class C_LI(InstructionHandler):
         """
         Execute C.LI, as well as C.HINT. The latter is
@@ -396,7 +385,6 @@ class C(InstructionSet):
         " ___ 5 fffff 43210 _|": C_RegImmed("C.ADDI","+",lambda hart,rs1,imm:rs1+imm),
         # Immediate must be nonzero and is sign-extended. Zero immediate is a hint.
         "+___ _ fffff _____ _|": C_NOP("C.HINT_ADDI imm=0"),
-        " __| B498A673215 _|": C_JAL(),  # Signed offset
         # "__| 5 fffff 43210 _|":None, # C.ADDIW in C64/128I
         " _|_ 5 ddddd 43210 _|": C_LI(),
         "+_|_ 5 _____ 43210 _|": C_NOP("C.HINT_LI rd=x0"),
