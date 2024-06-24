@@ -18,6 +18,10 @@ if __name__=="__main__":
     main()
 
 
+class Misaligned(Exception):
+    pass
+
+
 class Memory(dict):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
@@ -25,7 +29,7 @@ class Memory(dict):
         self.sbreak = set()
     def __missing__(self,k):
         return 0
-    def load(self,width,baseaddr):
+    def load(self,width,baseaddr,verbose=False,allow_misaligned=True):
         """
         Loads a little-endian value of arbitrary width from the memory
         :param baseaddr:
@@ -33,15 +37,20 @@ class Memory(dict):
         :return:
         """
         result=0
+        if not allow_misaligned:
+            misalignment=baseaddr%width
+            if misalignment!=0:
+                raise Misaligned()
         for ofs in range(width):
             try:
                 b=self[baseaddr+ofs]
             except KeyError:
                 b=0
             result |= b<<(ofs*8)
+        if verbose:
+            print(f"mem[0x{baseaddr:08x}]->0x{result:0{width * 2}x}")
         if baseaddr in self.lbreak:
             print("Memory breakpoint")
-            print(f"mem[0x{baseaddr:08x}]->0x{result:0{width * 2}x}")
         return result
     def store(self,width,baseaddr,value):
         """
