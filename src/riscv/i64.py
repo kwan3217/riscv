@@ -9,13 +9,12 @@ Created: 6/22/24
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-import riscv.bits
-from riscv.hart import InstructionSet, Hart, InstructionHandler
-from riscv.bits import bitmask, read_bitfield, signed
+from riscv.hart import InstructionSet
+from riscv.bits import read_bitfield, signed
 from riscv.i import I
 
 
-class I64(I):
+class I64(InstructionSet):
     ins_exec={
         "-BA9876543210  lllll ||_ ddddd _____||":I.Load('LWU',size=4,signed=False),
         "-BA9876543210  lllll _|| ddddd _____||":I.Load('LD',size=8,signed=True),
