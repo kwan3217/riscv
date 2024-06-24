@@ -149,8 +149,7 @@ alltests=([(32,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i
           [(32,"privilege",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/privilege/src/*.S"))]+
           [(64,"I",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]+
           [(64,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/C/src/*.S"))])
-for XLEN,extname,testname in alltests:
-    print(XLEN,extname,testname)
+
 
 @pytest.mark.parametrize(
     "XLEN,extname,testname",alltests
