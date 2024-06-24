@@ -8,7 +8,7 @@ from typing import Iterable, Mapping
 
 from riscv.bits import bitmask, read_bitfield, sign_extend, signed
 from riscv.decode import compile_encodings, decode
-from riscv.memory import Memory
+from riscv.memory import Memory, Misaligned
 from riscv.priv import trap
 
 
@@ -302,14 +302,13 @@ class Hart:
         # Read the first 16-bit parcel of the instruction, and figure out length from it
         try:
             parcel=self.mem.load(2,self.pc,allow_misaligned=False)
-        except:
+        except Misaligned:
             raise RVException(message=f"Misaligned load: Addr=0x{self.pc:08x}, width=2",
                               is_interrupt=False,
                               cause=ExcCause.INSTRUCTION_ADDRESS_MISALIGNED,
                               epc=self.pc,
                               tval=self.pc
                               )
-
         if aa:= read_bitfield(parcel, 1, 0) != 0b11:
             # Compressed instruction, 16 bits only
             return 2,parcel
