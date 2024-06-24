@@ -250,6 +250,7 @@ class Hart:
     """
     def __init__(self,exts:Iterable['InstructionSet'],mem=None,XLEN=32,breakpoints:set=None,halts:set=None):
         self.exts=exts
+        self.allow_misaligned=False
         if mem is None:
             mem=Memory()
         if breakpoints is None:
@@ -299,13 +300,22 @@ class Hart:
                  bit-length, enough for any instruction.
         """
         # Read the first 16-bit parcel of the instruction, and figure out length from it
-        parcel=self.mem.load(2,self.pc)
+        try:
+            parcel=self.mem.load(2,self.pc,allow_misaligned=False)
+        except:
+            raise RVException(message=f"Misaligned load: Addr=0x{self.pc:08x}, width=2",
+                              is_interrupt=False,
+                              cause=ExcCause.INSTRUCTION_ADDRESS_MISALIGNED,
+                              epc=self.pc,
+                              tval=self.pc
+                              )
+
         if aa:= read_bitfield(parcel, 1, 0) != 0b11:
             # Compressed instruction, 16 bits only
             return 2,parcel
         elif bbb:= read_bitfield(parcel, 4, 2) != 0b111:
             # 32-bit instruction
-            return 4,self.mem.load(4,self.pc)
+            return 4,self.mem.load(4,self.pc,allow_misaligned=True)
         else:
             # There is a proposal for instructions longer than 32-bits,
             # but it is not considered frozen and no instructions use it.
