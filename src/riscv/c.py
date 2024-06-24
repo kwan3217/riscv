@@ -397,10 +397,8 @@ class C(InstructionSet):
         " _|| _ ddddd _____ _|": None,  # Reserved
         "+_|| 5 _____ 43210 _|": C_NOP("C.HINT_LUI rd=x0"),
         "+|__ _ __ ggg 43210 _|": C_RegImmed("C.SRLI", ">L>", lambda hart, rs1, imm: rs1 >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
-        "+|__ 5 __ ggg 43210 _|": None,  # SRLI in C64/128I
         "+|__ _ __ 210 _____ _|": C_NOP("C.HINT_SRLI 64"),  # C.SRLI64 in RV128C
         "+|__ _ _| ggg 43210 _|": C_RegImmed("C.SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
-        "+|__ 5 _| ggg 43210 _|": None,  # SRAI in C64/128I
         "+|__ _ _| 210 _____ _|": C_NOP("C.HINT_SRAI 64"),  # C.SRAI64 in RV128C
         "x|__ 5 |_ ggg 43210 _|": C_RegImmed("C_ANDI","&",lambda hart,rs1,imm:rs1 & imm,immfmt='08x',immprefix='0x'),
         " |__ _ || ggg __ yyy _|": C_RpRp('C.SUB','-',lambda hart,a,b:a-b),
@@ -416,7 +414,6 @@ class C(InstructionSet):
         " ||| 843 mmm 76215 _|":C_Branch("C.BNEZ","!=",lambda a,b:a!=b),
         # Quadrant 2
         "+___ _ fffff 43210 |_": C_RegImmed("C.SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),  # Bit 12 is nzimm5, which must be 0 for C32I
-        " ___ 5 fffff 43210 |_": None,  # C.SLLI on C64/128I, reserved for non-standard extensions on C32I
         "+___ _ fffff _____ |_": C_NOP("C.HINT_SLLI 64"),  # C.SLLI rd,64 on C128I, hint on C32/64I
         "+__| 5 ddddd 43876 |_": None,  # C.FLDSP, C32/64F
         "+__| 5 ddddd 49876 |_": None,  # C.LQSP, C128I

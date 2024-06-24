@@ -14,7 +14,7 @@ from riscv.priv import trap
 
 def main():
     from test_riscof import test_riscof
-    test_riscof(64,"C","caddi",breakpoints={0x8000_0406})
+    test_riscof(64,"C","caddiw",breakpoints={0x8000_0406})
 
 
 if __name__ == "__main__":
