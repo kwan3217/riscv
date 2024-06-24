@@ -14,7 +14,7 @@ from riscv.priv import trap
 
 def main():
     from test_riscof import test_riscof
-    test_riscof(64,"C","caddiw",breakpoints={0x8000_0406})
+    test_riscof(32,"C","cebreak",breakpoints={0x8000_0406},sbreak={0x8000_301c})
 
 
 if __name__ == "__main__":
@@ -364,13 +364,13 @@ class Regfile:
             v=0
         else:
             v=self._x[r]
-            print(f"   x{r:2}->0x{v:0{self.XLEN//4}x}")
+            print(f"   x{r:2}({InstructionHandler.abi_regnames[r][0]:4s})->0x{v:0{self.XLEN//4}x}  # {InstructionHandler.abi_regnames[r][1]}")
         return v
     def __setitem__(self,r,v):
         if r==0:
             return
         v=v & bitmask(self.XLEN - 1, 0)
-        print(f"   x{r:2}<-0x{v:0{self.XLEN//4}x}")
+        print(f"   x{r:2}({InstructionHandler.abi_regnames[r][0]:4s})<-0x{v:0{self.XLEN//4}x} # {InstructionHandler.abi_regnames[r][1]}")
         #todo - Be careful about signed/unsigned, twos complement, sign extension, etc.
         self._x[r]=v
 

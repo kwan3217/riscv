@@ -258,8 +258,8 @@ class I(InstructionSet):
         " _______ zzzzz lllll ||_ ddddd _||__||":RegReg("OR", "|", lambda hart, rs1, rs2: rs1 | rs2),
         " _______ zzzzz lllll ||| ddddd _||__||":RegReg("AND", "&", lambda hart, rs1, rs2: rs1 & rs2),
         "+BA9876543210  lllll ___ ddddd ___||||":Nop("FENCE", "Memory Fence"),
-        " ____________  _____ ___ _____ |||__||":System("EBREAK", ExcCause.BREAKPOINT,"Break to debugger"),
-        " ___________|  _____ ___ _____ |||__||":System("ECALL", ExcCause.ECALL_FROM_M_MODE, "System call"),
+        " ___________|  _____ ___ _____ |||__||":System("EBREAK", ExcCause.BREAKPOINT,"Break to debugger"),
+        " ____________  _____ ___ _____ |||__||":System("ECALL", ExcCause.ECALL_FROM_M_MODE, "System call"),
     }
     def get_decode_table(self):
         return self.ins_exec
