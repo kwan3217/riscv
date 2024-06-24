@@ -122,7 +122,7 @@ later time.
 
 """
 from glob import glob
-from os.path import basename
+from os.path import basename, isfile
 
 import pytest
 
