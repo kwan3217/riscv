@@ -14,7 +14,7 @@ from riscv.priv import trap
 
 def main():
     from test_riscof import test_riscof
-    test_riscof(32,"C","cebreak",breakpoints={0x8000_0406},sbreak={0x8000_301c})
+    test_riscof(32,"privilege","misalign-lh",breakpoints={0x8000_0406},sbreak={0x8000_301c})
 
 
 if __name__ == "__main__":
@@ -131,12 +131,12 @@ class RVException(Exception):
     and then stuff the pc with the value from the correct CSR. It can
     then let the emulated hart continue to run.
     """
-    def __init__(self,*,message:str=None,is_interrupt:bool,cause:int,epc:int,mtval:int=0):
+    def __init__(self,*,message:str=None,is_interrupt:bool,cause:ExcCause,epc:int,tval:int=0):
         super().__init__(message)
         self.is_interrupt=is_interrupt
         self.cause=cause
         self.epc=epc
-        self.mtval=mtval
+        self.tval=tval
     def __str__(self):
         try:
             if self.is_interrupt:
