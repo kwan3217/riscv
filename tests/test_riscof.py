@@ -137,12 +137,23 @@ from spike import spike_sig, check_sig
 from riscv.zicsr import Zicsr
 
 
+def get_test_name(ins:str):
+    if "-" in ins:
+        return "-".join(basename(ins).split("-")[0:-1])
+    else:
+        return ".".join(basename(ins).split(".")[0:-1])
+
+
+alltests=([(32,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
+          [(32,"I",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]+
+          [(32,"privilege",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/privilege/src/*.S"))]+
+          [(64,"I",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]+
+          [(64,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/C/src/*.S"))])
+for XLEN,extname,testname in alltests:
+    print(XLEN,extname,testname)
+
 @pytest.mark.parametrize(
-    "XLEN,extname,testname",
-    [(32,"C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
-    [(32,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]+
-    [(64,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]+
-    [(64,"C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/C/src/*.S"))]
+    "XLEN,extname,testname",alltests
 )
 def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,sbreak:set=None):
     """
@@ -156,6 +167,8 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     :return:
     """
     elffn=f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
+    if not isfile(elffn):
+        elffn = f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}.S/ref/ref.elf"
     if XLEN==32:
         isas=(I(),        C(), C32(), Zicsr())
     elif XLEN==64:
