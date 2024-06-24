@@ -70,48 +70,23 @@ This module contains those that don't care about XLEN. Those that
 only apply to 32bit are in c32.py. Those for 64 or greater are in
 c64.py, while those for only 128 are in c128.
 
+This module depends on the I instruction set. Since all operations
+are merely encodings of existing I instructions, we can (and should)
+use I instruction handlers when possible. Some instructions with
+immediates are signed in I and zero-extended in C, but we leave
+that to the decoder.
+
 Created: 6/12/24
 """
 from dataclasses import dataclass
 from typing import Callable, Mapping, Iterable
 
-from riscv.hart import InstructionSet, Hart, WrongInterpreter, InstructionHandler, \
-    IllegalInstruction, ExcCause, RVException
-from riscv.bits import bitmask, read_bitfield, signed, read_bitfields
-
-
-@dataclass
-class ParsedInstruction:
-    op:int=None
-    funct:int=None
-    rs2:int=None
-    rd:int=None
-    rs1:int=None
-    imm:int=None
-    offset:int=None
-    target:int=None
+from riscv.hart import InstructionSet, Hart, WrongInterpreter, InstructionHandler, ExcCause
+from riscv.bits import bitmask, signed
+from riscv.i import I
 
 
 class C(InstructionSet):
-    class C_NOP(InstructionHandler):
-        """
-        NOPs and Hints. All hints are no-ops, but we want to see everything about it when we disassemble.
-        """
-        def __init__(self,name:str):
-            self.name=name
-        def execute(self, p: Mapping[str, int], hart: 'Hart') -> None:
-            pass
-        def disasm(self, p: Mapping[str, int], XLEN: int) -> str:
-            return f"{self.name:7s} {p}"
-        def formula(self, p: Mapping[str, int], XLEN: int):
-            return f"(No operation)"
-    class C_ANDI(InstructionHandler):
-        def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            hart.x[p['rd']]=hart.x[p['rs1']]&p['imm']
-        def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            return f"C.ANDI   x{p['rd']:2d},0x{p['imm']:08x}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.abi_regnames[p['rd']][self.nameidx]}&=0x{p['imm']:08x}"
     class C_StoreSP(InstructionHandler):
         """
         "C.SWSP stores a 32-bit value in register rs2 to memory. It
@@ -130,29 +105,6 @@ class C(InstructionSet):
             return f"{self.name:9s}x{p['rs2']:2},{p['imm']:15}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p['imm']) if p['imm']!=0 else ''}]=b{self.size*8}({self.abi_regnames[p['rs2']][self.nameidx]})"
-    class C_LW(InstructionHandler):
-        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            size = 4
-            addr = hart.x[p['rs1']]  # base
-            addr += p['imm']
-            val = hart.mem.load(size, addr)
-            # Note that this expands to an rv32i LW, not an rv64i LWU, so it always sign-extends.
-            val = signed(val, size * 8 - 1)
-            hart.x[p['rd']] = val
-        def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"C.LW r{p['rs1']:2},r{p['rd']:2},{p['imm']:12}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.abi_regnames[p['rd']][self.nameidx]}=i32(mem[{self.abi_regnames[p['rs1']][self.nameidx]}{'+'+str(p['imm']) if p['imm']>0 else ''}])"
-    class C_SW(InstructionHandler):
-        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            size = 4
-            addr = hart.x[p['rs1']]  # base
-            addr += p['imm']
-            hart.mem.store(size, addr,hart.x[p['rs2']])
-        def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"C.SW r{p['rs1']:2},r{p['rs2']:2},{p['imm']:12}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"b32(mem[{self.abi_regnames[p['rs1']][self.nameidx]}{'+'+str(p['imm']) if p['imm']>0 else ''}])={self.abi_regnames[p['rs2']][self.nameidx]}"
     class C_LoadSP(InstructionHandler):
         def __init__(self,name:str,*,size:int=4):
             self.name=name
@@ -202,18 +154,6 @@ class C(InstructionSet):
                 return f"Hint (No operation)"
             else:
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}={p['imm']}"
-    class C_LUI(InstructionHandler):
-        """
-        Execute C.LUI and C.ADDI16SP. C.LUI has rd!=2, while
-        C.ADDI16SP has rd==2. The bit order of the constants is
-        different between the two instructions.
-        """
-        def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            hart.x[p['rd']]=p['imm']
-        def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            return f"C.LUI   x{p['rd']:2},{p['imm']:12d}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.abi_regnames[p['rd']][self.nameidx]}={p['imm']}"
     class C_ADDI16SP(InstructionHandler):
         """
         Execute C.ADDI16SP. Add immediate to Stack Pointer. I16 means
@@ -245,33 +185,6 @@ class C(InstructionSet):
             return f"C.ADDI4SPN x{p['rd']:2d},{p['imm']:12d}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=stackptr+{p['imm']}"
-    class C_ADD(InstructionHandler):
-        """
-        Execute C.EBREAK, C.JALR, or C.ADD. These all
-        have the same opcode and funct bits, so they
-        are only distinguishable by their register operands:
-        * C.ADD - rs1/rd!=0, rs2!=0. IE don't use x0 as either
-          a source or a destination. This would be a NOP, so
-          we steal those bits for something else. If rs1/rd==0,
-          this is a hint as it would be a NOP.
-        * C.JALR - rs1/rd!=0, rs2==0. If we would source an add
-          from x0, then this is a JALR instead
-        * C.EBREAK - If this would both source and write to x0,
-          then this is an EBREAK instead.
-        """
-        def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            hart.x[p['rd']]=hart.x[p['rs1']]+hart.x[p['rs2']]
-        def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            return f"C.ADD  x{p['rd']:2d},x{p['rs2']:2d}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.abi_regnames[p['rd']][self.nameidx]}+={self.abi_regnames[p['rs2']][self.nameidx]}"
-    class C_EBREAK(InstructionHandler):
-        def execute(self, p: Mapping[str,int], hart: 'Hart') -> None:
-            raise RVException(message=f"C.EBREAK",epc=hart.pc,is_interrupt=False,cause=ExcCause.BREAKPOINT.value,mtval=hart.pc)
-        def disasm(self, p: Mapping[str,int], XLEN: int) -> str:
-            return "C.EBREAK"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            return "Breakpoint"
     class C_JALR(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             # Make sure to do a swap in case rs1=x1
@@ -325,46 +238,6 @@ class C(InstructionSet):
             return f"{self.name:7s}x{p['rs1']:2},{p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"if {self.abi_regnames[p['rs1']][self.nameidx]}{self.symbol}0 pc=pc{'+' if p['imm'] >= 0 else ''}{p['imm']}"
-    class C_RegImmed(InstructionHandler):
-        """
-        An instruction which acts on a register and an immediate.
-        """
-
-        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int],immfmt:str='d',immprefix:str=''):
-            """
-            Define a specific instruction
-
-            :param name: Name, following the RISC-V book for the canonical name of this
-                         instruction in all uppercase
-            :param symbol: Symbol of this instruction, approximating the symbol that would
-                           be used in C/C++ to describe the same operation. If the symbol
-                           does *not* have the substring %s, it is considered to be an infix
-                           operator such as `+`. If it *does* have the substring %s, then it
-                           is considered to be a complete expression, and must have exactly
-                           two %s placeholders. An example is `(signed(%s)<signed(%s))?1:0` for
-                           SLTI.
-            :param op: Callable which is handed two integer operands and returns the result
-                       of the operation. It's often convenient to use a lambda here. It is
-                       passed the hart in question, but that is usually just used to get the
-                       current XLEN. Note that it is passed *values*, not register references.
-                       The values are passed as unsigned integers, but can be converted to
-                       signed using the XLEN from the hart.
-            """
-            self.name = name
-            self.symbol = symbol
-            self.op = op
-            self.immfmt=immfmt
-            self.immprefix=immprefix
-        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            result = self.op(hart, hart.x[p['rs1']], p['imm'])
-            hart.x[p['rd']] = result
-        def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.name:7s}x{p['rd']:2},x{p['rs1']:2},{p['imm']:12}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            if p['rs1'] == 0:
-                return f"{self.abi_regnames[p['rd']][self.nameidx]}={p['imm']}"
-            else:
-                return f"{self.abi_regnames[p['rd']][self.nameidx]}{self.symbol}={self.immprefix}{p['imm']:{self.immfmt}}"
     def get_decode_table(self):
         return self.ins_exec
     ins_exec = {
@@ -373,34 +246,34 @@ class C(InstructionSet):
         "+___ 549 876 23 eee __": C_ADDI4SPN(),  # Immediate is specified as zero-extended
         " __| 543 mmm 76 eee __": None,  # C.FLD in C32/64F
         " __| 548 mmm 76 eee __": None,  # C.LQ in C128I
-        "+_|_ 543 mmm 26 eee __": C_LW(),  # Immediate is specified as zero-extended
+        "+_|_ 543 mmm 26 eee __": I.Load('C.LW',size=4,signed=True),  # Immediate is specified as zero-extended
         " _|| 543 mmm 26 eee __": None,  # C.FLW in C32F
         " _|| 543 mmm 76 eee __": None,  # C.LD
         " |__ ... ... .. ... __": None,  # Reserved
         " |_| 543 mmm 76 yyy __": None,  # C.FSD in C32/64F
         " |_| 548 mmm 76 yyy __": None,  # C.SQ in C128I
-        "+||_ 543 mmm 26 yyy __": C_SW(),  # Likewise
+        "+||_ 543 mmm 26 yyy __": I.Store('C.SW',size=4),  # Likewise
         " ||| 543 mmm 26 yyy __": None,  # C.FSW
         # Quadrant 1
-        " ___ _ _____ _____ _|": C_NOP("C.NOP"),
-        "+___ 5 _____ 43210 _|": C_NOP("C.HINT_NOP rd=0"),
+        " ___ _ _____ _____ _|": I.Nop("C.NOP"),
+        "+___ 5 _____ 43210 _|": I.Nop("C.HINT_NOP rd=0"),
         # Treat it as unsigned zero-ext because it will be used as a bitfield
-        " ___ 5 fffff 43210 _|": C_RegImmed("C.ADDI","+",lambda hart,rs1,imm:rs1+imm),
+        " ___ 5 fffff 43210 _|": I.RegImmed("C.ADDI","+",lambda hart,rs1,imm:rs1+imm),
         # Immediate must be nonzero and is sign-extended. Zero immediate is a hint.
-        "+___ _ fffff _____ _|": C_NOP("C.HINT_ADDI imm=0"),
+        "+___ _ fffff _____ _|": I.Nop("C.HINT_ADDI imm=0"),
         # "__| 5 fffff 43210 _|":None, # C.ADDIW in C64/128I
         " _|_ 5 ddddd 43210 _|": C_LI(),
-        "+_|_ 5 _____ 43210 _|": C_NOP("C.HINT_LI rd=x0"),
+        "+_|_ 5 _____ 43210 _|": I.Nop("C.HINT_LI rd=x0"),
         " _|| 9 ___|_ 46875 _|": C_ADDI16SP(),  # Nonzero sign-extended. Zero immediate is reserved.
         " _|| _ ___|_ _____ _|": None,  # Reserved for future standard extensions, equivalent to C.ADDI16SP 0
-        " _|| H ddddd GFEDC _|": C_LUI(),
+        " _|| H ddddd GFEDC _|": I.LUI("C.LUI"),
         " _|| _ ddddd _____ _|": None,  # Reserved
-        "+_|| 5 _____ 43210 _|": C_NOP("C.HINT_LUI rd=x0"),
-        "+|__ _ __ ggg 43210 _|": C_RegImmed("C.SRLI", ">L>", lambda hart, rs1, imm: rs1 >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
-        "+|__ _ __ 210 _____ _|": C_NOP("C.HINT_SRLI 64"),  # C.SRLI64 in RV128C
-        "+|__ _ _| ggg 43210 _|": C_RegImmed("C.SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
-        "+|__ _ _| 210 _____ _|": C_NOP("C.HINT_SRAI 64"),  # C.SRAI64 in RV128C
-        "x|__ 5 |_ ggg 43210 _|": C_RegImmed("C_ANDI","&",lambda hart,rs1,imm:rs1 & imm,immfmt='08x',immprefix='0x'),
+        "+_|| 5 _____ 43210 _|": I.Nop("C.HINT_LUI rd=x0"),
+        "+|__ _ __ ggg 43210 _|": I.RegImmed("C.SRLI", ">L>", lambda hart, rs1, imm: rs1 >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
+        "+|__ _ __ 210 _____ _|": I.Nop("C.HINT_SRLI 64"),  # C.SRLI64 in RV128C
+        "+|__ _ _| ggg 43210 _|": I.RegImmed("C.SRAI", ">A>", lambda hart, rs1, imm: hart.signed(rs1) >> imm),  # Bit 12 is nzimm5, which must be 0 for RV32C
+        "+|__ _ _| 210 _____ _|": I.Nop("C.HINT_SRAI 64"),  # C.SRAI64 in RV128C
+        "x|__ 5 |_ ggg 43210 _|": I.RegImmed("C_ANDI","&",lambda hart,rs1,imm:rs1 & imm,immfmt='08x',immprefix='0x'),
         " |__ _ || ggg __ yyy _|": C_RpRp('C.SUB','-',lambda hart,a,b:a-b),
         " |__ _ || ggg _| yyy _|": C_RpRp('C.XOR','^',lambda hart,a,b:a^b),
         " |__ _ || ggg |_ yyy _|": C_RpRp('C.OR' ,'|',lambda hart,a,b:a|b),
@@ -413,8 +286,8 @@ class C(InstructionSet):
         " ||_ 843 mmm 76215 _|":C_Branch("C.BEQZ","==",lambda a,b:a==b),
         " ||| 843 mmm 76215 _|":C_Branch("C.BNEZ","!=",lambda a,b:a!=b),
         # Quadrant 2
-        "+___ _ fffff 43210 |_": C_RegImmed("C.SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),  # Bit 12 is nzimm5, which must be 0 for C32I
-        "+___ _ fffff _____ |_": C_NOP("C.HINT_SLLI 64"),  # C.SLLI rd,64 on C128I, hint on C32/64I
+        "+___ _ fffff 43210 |_": I.RegImmed("C.SLLI", "<<", lambda hart, rs1, imm: rs1 << imm),  # Bit 12 is nzimm5, which must be 0 for C32I
+        "+___ _ fffff _____ |_": I.Nop("C.HINT_SLLI 64"),  # C.SLLI rd,64 on C128I, hint on C32/64I
         "+__| 5 ddddd 43876 |_": None,  # C.FLDSP, C32/64F
         "+__| 5 ddddd 49876 |_": None,  # C.LQSP, C128I
         "+_|_ 5 ddddd 43276 |_": C_LoadSP("C.LWSP",size=4),
@@ -424,11 +297,11 @@ class C(InstructionSet):
         " |__ _ lllll _____ |_": C_JR(),  # Encoding that C.MV rd=x0 *would* have
         " |__ _ _____ _____ |_": None,  # Reserved, equivalent to C.JR x0
         " |__ _ ddddd zzzzz |_": C_MV(),
-        " |__ _ _____ zzzzz |_": C_NOP("C.HINT_MV rd=x0"),  # Equivalent to C.MV x0=rs2
-        " |__ | _____ _____ |_": C_EBREAK(),  # Encoding that C.ADD x0,x0 *would* have
+        " |__ _ _____ zzzzz |_": I.Nop("C.HINT_MV rd=x0"),  # Equivalent to C.MV x0=rs2
+        " |__ | _____ _____ |_": I.System("EBREAK", ExcCause.BREAKPOINT,"Break to debugger"),  # Encoding that C.ADD x0,x0 *would* have
         " |__ | lllll _____ |_": C_JALR(),  # Encoding that C.ADD rs1/rd,x0 *would* have
-        " |__ | fffff zzzzz |_": C_ADD(),
-        " |__ | _____ zzzzz |_": C_NOP("C.HINT_ADD rd=x0"),  # Encoding that C.ADD x0,rs2 *would* have
+        " |__ | fffff zzzzz |_": I.RegReg("C.ADD", "+", lambda hart, rs1, rs2: rs1 + rs2),
+        " |__ | _____ zzzzz |_": I.Nop("C.HINT_ADD rd=x0"),  # Encoding that C.ADD x0,rs2 *would* have
         "+|_| 543876 zzzzz |_": None,  # C.FSDSP, CF
         "+|_| 549876 zzzzz |_": None,  # C.SQSP, C128I
         "+||_ 543276 zzzzz |_": C_StoreSP("C.SWSP",size=4), # Zero-extended immediate

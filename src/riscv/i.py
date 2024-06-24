@@ -9,16 +9,18 @@ from dataclasses import dataclass
 from typing import Callable, Mapping
 
 import riscv.bits
-from riscv.hart import InstructionSet, Hart, InstructionHandler
+from riscv.hart import InstructionSet, Hart, InstructionHandler, RVException, ExcCause
 from riscv.bits import bitmask, read_bitfield, signed
 
 
 class I(InstructionSet):
     class LUI(InstructionHandler):
+        def __init__(self,name:str="LUI"):
+            self.name=name
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             hart.x[p["rd"]] = p["imm"]
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"LUI    r{p['rd']:2},     {p['imm']:12}"
+            return f"{self.name:7s}r{p['rd']:2},     {p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=0x{p['imm']:08x}"
     class AUIPC(InstructionHandler):
@@ -135,7 +137,7 @@ class I(InstructionSet):
         An instruction which acts on a register and an immediate.
         """
 
-        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int], *,w:int=None):
+        def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int], *,w:int=None,immfmt:str='d',immprefix:str=''):
             """
             Define a specific instruction
 
@@ -163,6 +165,8 @@ class I(InstructionSet):
             self.symbol = symbol
             self.op = op
             self.w=w
+            self.immfmt = immfmt
+            self.immprefix = immprefix
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             result = self.op(hart, hart.x[p['rs1']], p['imm'])
             if self.w is not None:
@@ -181,7 +185,7 @@ class I(InstructionSet):
             if "%s" in self.symbol:
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.symbol % (self.abi_regnames[p['rs1']][self.nameidx], p['imm'])}"
             else:
-                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs1']][self.nameidx]}{this_symbol}{p['imm']}"
+                return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs1']][self.nameidx]}{this_symbol}{self.immprefix}{p['imm']:{self.immfmt}}"
     class RegReg(InstructionHandler):
         def __init__(self, name: str, symbol: str, op: Callable[[Hart, int, int], int],*,w:int=None):
             self.name = name
@@ -201,27 +205,17 @@ class I(InstructionSet):
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.symbol % (self.abi_regnames[p['rs1']][self.nameidx], self.abi_regnames[p['rs2']][self.nameidx])}"
             else:
                 return f"{self.abi_regnames[p['rd']][self.nameidx]}={self.abi_regnames[p['rs1']][self.nameidx]}{self.symbol}{self.abi_regnames[p['rs2']][self.nameidx]}"
-    class SYSTEM(InstructionHandler):
-        def __init__(self, name: str = "Undefined", comment: str = None, message: str = None):
-            """
-
-            :param name: Name of instruction
-            :param formula:
-            :param message:
-            """
-            if message is None:
-                self.message = "Undefined instruction"
-            else:
-                self.message = message
+    class System(InstructionHandler):
+        def __init__(self, name: str,cause:ExcCause, comment: str = None):
             self.name = name
             self.comment = comment
+            self.cause=cause
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            raise StopIteration(f"{self.message} -- parsed={p}")
+            raise RVException(message=self.name,epc=hart.pc,is_interrupt=False,cause=self.cause.value,mtval=hart.pc)
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return self.name
         def formula(self, p: Mapping[str,int], XLEN: int):
             return self.comment
-    #        opcode  Funct3  Funct7
     ins_exec={
         "xVUTSRQPONMLKJIHGFEDC    ddddd _||_|||":LUI(),
         "-VUTSRQPONMLKJIHGFEDC    ddddd __|_|||":AUIPC(),
@@ -264,8 +258,8 @@ class I(InstructionSet):
         " _______ zzzzz lllll ||_ ddddd _||__||":RegReg("OR", "|", lambda hart, rs1, rs2: rs1 | rs2),
         " _______ zzzzz lllll ||| ddddd _||__||":RegReg("AND", "&", lambda hart, rs1, rs2: rs1 & rs2),
         "+BA9876543210  lllll ___ ddddd ___||||":Nop("FENCE", "Memory Fence"),
-        " ____________  _____ ___ _____ |||__||":SYSTEM("EBREAK", "Break to debugger", "Break to debugger"),
-        " ___________|  _____ ___ _____ |||__||":SYSTEM("ECALL", "System call", "System call"),
+        " ____________  _____ ___ _____ |||__||":System("EBREAK", ExcCause.BREAKPOINT,"Break to debugger"),
+        " ___________|  _____ ___ _____ |||__||":System("ECALL", ExcCause.ECALL_FROM_M_MODE, "System call"),
     }
     def get_decode_table(self):
         return self.ins_exec
