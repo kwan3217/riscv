@@ -11,6 +11,7 @@ from typing import Callable, Mapping
 import riscv.bits
 from riscv.hart import InstructionSet, Hart, InstructionHandler, RVException, ExcCause
 from riscv.bits import bitmask, read_bitfield, signed
+from riscv.memory import Misaligned
 
 
 class I(InstructionSet):
@@ -75,7 +76,17 @@ class I(InstructionSet):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             addr = hart.x[p['rs1']]  # base
             addr += signed(p['imm'], 12)
-            val = hart.mem.load(self.size, addr)
+            try:
+                val = hart.mem.load(self.size, addr,verbose=True,allow_misaligned=False)
+            except Misaligned:
+                # Defer throwing the RVException to here, where the hart with its pc is available
+                raise RVException(message=f"Misaligned load: Addr=0x{addr:08x}, width={self.size}",
+                                  is_interrupt=False,
+                                  cause=ExcCause.LOAD_ADDRESS_MISALIGNED,
+                                  epc=hart.pc,
+                                  tval=addr
+                                  )
+
             if self.signed:
                 val = signed(val, self.size * 8 - 1)
             hart.x[p['rd']] = val
@@ -211,7 +222,7 @@ class I(InstructionSet):
             self.comment = comment
             self.cause=cause
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            raise RVException(message=self.name,epc=hart.pc,is_interrupt=False,cause=self.cause.value,mtval=hart.pc)
+            raise RVException(message=self.name,epc=hart.pc,is_interrupt=False,cause=self.cause,tval=hart.pc)
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return self.name
         def formula(self, p: Mapping[str,int], XLEN: int):
