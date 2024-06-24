@@ -10,8 +10,8 @@ from riscv.bits import read_bitfield
 
 def trap(hart:'Hart',e:'RVException'):
     print(f"Handling {e}")
-    hart.csr['mcause'] = e.cause | ((1 if e.is_interrupt else 0)<<31)
-    hart.csr['mtval']=e.mtval
+    hart.csr['mcause'] = e.cause.value | ((1 if e.is_interrupt else 0)<<31)
+    hart.csr['mtval']=e.tval
     hart.csr['mepc']=e.epc # This is always the address of the instruction
                            #   that caused the exception/was interrupted.
                            #   It is up to the trap handler to decide to
