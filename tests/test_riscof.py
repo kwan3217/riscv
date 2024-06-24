@@ -127,9 +127,10 @@ from os.path import basename
 import pytest
 
 from elf import read_elf, read_syms
+from riscv.c64 import C64
 from riscv.hart import Hart
 from riscv.i64 import I64
-from riscv.rv32c import RV32C
+from riscv.c import C
 from riscv.i import I
 from spike import spike_sig, check_sig
 from riscv.zicsr import Zicsr
@@ -137,9 +138,10 @@ from riscv.zicsr import Zicsr
 
 @pytest.mark.parametrize(
     "XLEN,extname,testname",
-    list(reversed([(32,"C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
+    [(32,"C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
     [(32,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]+
-    [(64,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]))
+    [(64,"I","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]+
+    [(64,"C","-".join(basename(ins).split("-")[0:-1])) for ins in sorted(glob("riscof_work/rv64i_m/C/src/*.S"))]
 )
 def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,sbreak:set=None):
     """
@@ -153,7 +155,7 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     :return:
     """
     elffn=f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
-    hart = Hart((I(), I64(), RV32C(), Zicsr()),XLEN=XLEN,breakpoints=breakpoints)
+    hart = Hart((I(), I64(), C(), C64(), Zicsr()), XLEN=XLEN, breakpoints=breakpoints)
     if sbreak is not None:
         hart.mem.sbreak=sbreak
     hart.mem.stuff(read_elf(elffn))

@@ -65,6 +65,11 @@ goes easily into a table. It seems like the coding is more amenable to
 such things as a decoding ROM (like the 6502) with its required high,
 required low, or don't care states for each bit in the encoding. It
 might be a good use case for Python structural match statement.
+
+This module contains those that don't care about XLEN. Those that
+only apply to 32bit are in c32.py. Those for 64 or greater are in
+c64.py, while those for only 128 are in c128.
+
 Created: 6/12/24
 """
 from dataclasses import dataclass
@@ -87,7 +92,7 @@ class ParsedInstruction:
     target:int=None
 
 
-class RV32C(InstructionSet):
+class C(InstructionSet):
     class C_NOP(InstructionHandler):
         """
         NOPs and Hints. All hints are no-ops, but we want to see everything about it when we disassemble.
@@ -384,7 +389,6 @@ class RV32C(InstructionSet):
         " |_| 548 mmm 76 yyy __": None,  # C.SQ in C128I
         "+||_ 543 mmm 26 yyy __": C_SW(),  # Likewise
         " ||| 543 mmm 26 yyy __": None,  # C.FSW
-        " ||| 543 mmm 76 yyy __": None,  # C.SD
         # Quadrant 1
         " ___ _ _____ _____ _|": C_NOP("C.NOP"),
         "+___ 5 _____ 43210 _|": C_NOP("C.HINT_NOP rd=0"),
