@@ -148,11 +148,12 @@ def compile_encodings(human_encodings):
     result={}
     for human_encoding, handler in human_encodings.items():
         clearset, fields, sign_ext, signed = compile_encoding(human_encoding)
+        handler=compiled_handler(fields=fields,sign_ext=sign_ext,signed=signed,handler=handler)
         if clearset in result:
-            if result[clearset][1] is not None:
+            if result[clearset].handler is not None:
                 # Otherwise we are just replacing a reserved
                 warn(f"Duplicate clearset {clearset}-- old={result[clearset]}, new={(fields, handler)}")
-        result[clearset] = compiled_handler(fields=fields, sign_ext=sign_ext,signed=signed, handler=handler)
+        result[clearset] = handler
     return result
 
 
