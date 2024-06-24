@@ -52,13 +52,17 @@ class Memory(dict):
         if baseaddr in self.lbreak:
             print("Memory breakpoint")
         return result
-    def store(self,width,baseaddr,value):
+    def store(self,width,baseaddr,value,allow_misaligned=True):
         """
         Stores a little-endian value of arbitrary width from the memory
         :param baseaddr:
         :param width:
         :return:
         """
+        if not allow_misaligned:
+            misalignment=baseaddr%width
+            if misalignment!=0:
+                raise Misaligned()
         print(f"mem[0x{baseaddr:08x}]<-0x{value:0{width * 2}x}")
         for ofs in range(width):
             self[baseaddr+ofs]= read_bitfield(value, ofs * 8 + 7, ofs * 8)
