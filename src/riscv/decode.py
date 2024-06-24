@@ -31,6 +31,7 @@ some way to automatically do it, like maybe give priority to
 the instructions where more bits are required to be set or cleared.
 """
 from collections import namedtuple
+from dataclasses import dataclass
 from typing import Mapping, Callable, Any, Iterable
 from warnings import warn
 
@@ -62,10 +63,10 @@ bitfields_desc=Mapping[str,Iterable[subfield_desc]]
 # Compiled description of one instruction.
 # 0 is clear mask -- bits which are set in this mask must be cleared in the instruction for it to match
 # 1 is set mask   -- bits which are set in this mask must be set in the instruction for it to match
+@dataclass(frozen=True)
 class compiled_encoding_bitmask:
-    def __init__(self,c,s):
-        self.c=c
-        self.s=s
+    c:int
+    s:int
     def __str__(self):
         result=['.']*32
         for mask,c in zip([self.c,self.s],['0','1']):
