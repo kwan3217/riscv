@@ -77,7 +77,7 @@ class I(InstructionSet):
             addr = hart.x[p['rs1']]  # base
             addr += signed(p['imm'], 12)
             try:
-                val = hart.mem.load(self.size, addr,verbose=True,allow_misaligned=False)
+                val = hart.mem.load(self.size, addr,verbose=True,allow_misaligned=hart.allow_misaligned)
             except Misaligned:
                 # Defer throwing the RVException to here, where the hart with its pc is available
                 raise RVException(message=f"Misaligned load: Addr=0x{addr:08x}, width={self.size}",
@@ -86,7 +86,6 @@ class I(InstructionSet):
                                   epc=hart.pc,
                                   tval=addr
                                   )
-
             if self.signed:
                 val = signed(val, self.size * 8 - 1)
             hart.x[p['rd']] = val
@@ -103,7 +102,16 @@ class I(InstructionSet):
             addr = hart.x[p['rs1']]  # base
             addr += p['imm']
             val=hart.x[p['rs2']]
-            hart.mem.store(self.size, addr, val)
+            try:
+                hart.mem.store(self.size, addr, val,allow_misaligned=hart.allow_misaligned)
+            except Misaligned:
+                # Defer throwing the RVException to here, where the hart with its pc is available
+                raise RVException(message=f"Misaligned store: Addr=0x{addr:08x}, width={self.size}",
+                                  is_interrupt=False,
+                                  cause=ExcCause.STORE_AMO_ADDRESS_MISALIGNED,
+                                  epc=hart.pc,
+                                  tval=addr
+                                  )
         def disasm(self, p: Mapping[str,int], XLEN: int):
             return f"{self.name:7s}x{p['rs1']:2},x{p['rs2']:2},{p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
