@@ -14,7 +14,7 @@ from riscv.priv import trap
 
 def main():
     from test_riscof import test_riscof
-    test_riscof(64,"I","srliw",sbreak={0x8000_4038})
+    test_riscof(64,"C","caddi",breakpoints={0x8000_0406})
 
 
 if __name__ == "__main__":
@@ -158,8 +158,8 @@ class IllegalInstruction(RVException):
     in the privileged architecture manual. For now we will just
     not handle the exception and let Python handle the failure.
     """
-    def __init(self,message:str=None):
-        super().__init__(message=message,is_interrupt=False,cause=int(ExcCause.ILLEGAL_INSTRUCTION))
+    def __init__(self,message:str=None,*,epc:int):
+        super().__init__(message=message,is_interrupt=False,cause=ExcCause.ILLEGAL_INSTRUCTION.value,epc=epc)
 
 
 class InstructionHandler:
@@ -331,10 +331,11 @@ class Hart:
         else:
             if read_bitfield(ins, 1, 0)==0b11:
                 from riscv.i import I
-                raise IllegalInstruction(f"At pc=0x{self.pc:08x}, unhandled instruction {I(ins, self.XLEN, True)}")
+                raise IllegalInstruction(f"Unhandled instruction {I(ins, self.XLEN, True)}")
             else:
-                raise IllegalInstruction(f"At pc=0x{self.pc:08x}, unhandled compressed instruction "
-                                 f"0b{read_bitfield(ins, 15, 13):03b}_{read_bitfield(ins, 12, 12):01b}_{read_bitfield(ins, 11, 7):05b}_{read_bitfield(ins, 6, 2):05b}_{read_bitfield(ins, 1, 0):02b}")
+                raise IllegalInstruction(f"Unhandled compressed instruction "
+                                         f"0b{read_bitfield(ins, 15, 13):03b}_{read_bitfield(ins, 12, 12):01b}_{read_bitfield(ins, 11, 7):05b}_{read_bitfield(ins, 6, 2):05b}_{read_bitfield(ins, 1, 0):02b}",
+                                         epc=self.pc)
 
 
 class StateUpdate:
