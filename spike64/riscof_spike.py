@@ -91,7 +91,7 @@ class spike(pluginTemplate):
 
             elf = 'ref.elf'
 
-            execute = "@cd "+testentry['work_dir']+";"
+            execute = "cd "+testentry['work_dir']+";"
 
             cmd = self.compile_cmd.format(testentry['isa'].lower(), 64) + ' ' + test + ' -o ' + elf
 
@@ -105,7 +105,7 @@ class spike(pluginTemplate):
 
             #TODO: You will need to add any other arguments to your DUT
             #      executable if any in the quotes below
-            execute += self.ref_exe + f' --isa={testentry["isa"]} ref.elf'
+            #execute += self.ref_exe + f' --isa={testentry["isa"]} ref.elf'
 
             #TODO: The following is useful only if your reference model can
             #      support coverage extraction from riscv-isac. Else leave it

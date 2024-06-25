@@ -91,7 +91,7 @@ class spike(pluginTemplate):
 
             elf = 'ref.elf'
 
-            execute = "@cd "+testentry['work_dir']+";"
+            execute = "cd "+testentry['work_dir']+";"
 
             cmd = self.compile_cmd.format(testentry['isa'].lower(), 64) + ' ' + test + ' -o ' + elf
 
