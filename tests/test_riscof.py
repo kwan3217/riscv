@@ -133,6 +133,7 @@ from riscv.i64 import I64
 from riscv.c import C
 from riscv.c32 import C32
 from riscv.c64 import C64
+from riscv.zifencei import Zifencei
 from spike import spike_sig, check_sig
 from riscv.zicsr import Zicsr
 
@@ -147,8 +148,12 @@ def get_test_name(ins:str):
 alltests=([(32,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
           [(32,"I",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]+
           [(32,"privilege",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/privilege/src/*.S"))]+
+          [(32,"Zifencei",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/Zifencei/src/*.S"))]+
           [(64,"I",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]+
-          [(64,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/C/src/*.S"))])
+          [(64,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/C/src/*.S"))]+
+          [(64,"privilege",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/privilege/src/*.S"))]+
+          [(64,"Zifencei",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/Zifencei/src/*.S"))]
+          )
 
 
 @pytest.mark.parametrize(
@@ -169,9 +174,9 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     if not isfile(elffn):
         elffn = f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}.S/ref/ref.elf"
     if XLEN==32:
-        isas=(I(),        C(), C32(), Zicsr())
+        isas=(I(),        C(), C32(), Zicsr(), Zifencei())
     elif XLEN==64:
-        isas=(I(), I64(), C(), C64(), Zicsr())
+        isas=(I(), I64(), C(), C64(), Zicsr(), Zifencei())
     hart = Hart(isas, XLEN=XLEN, breakpoints=breakpoints)
     if sbreak is not None:
         hart.mem.sbreak=sbreak
