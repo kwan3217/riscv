@@ -139,20 +139,21 @@ from riscv.zicsr import Zicsr
 
 
 def get_test_name(ins:str):
-    if "-" in ins:
-        return "-".join(basename(ins).split("-")[0:-1])
-    else:
-        return ".".join(basename(ins).split(".")[0:-1])
+    return ".".join(basename(ins).split(".")[0:-1])
 
 
-alltests=([(32,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/C/src/*.S"))]+
-          [(32,"I",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/I/src/*.S"))]+
-          [(32,"privilege",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/privilege/src/*.S"))]+
-          [(32,"Zifencei",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv32i_m/Zifencei/src/*.S"))]+
-          [(64,"I",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/I/src/*.S"))]+
-          [(64,"C",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/C/src/*.S"))]+
-          [(64,"privilege",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/privilege/src/*.S"))]+
-          [(64,"Zifencei",get_test_name(ins)) for ins in sorted(glob("riscof_work/rv64i_m/Zifencei/src/*.S"))]
+def test_folder(XLEN:int,ext:str):
+    return [(XLEN,ext,get_test_name(script)) for script in sorted(glob(f"riscof_work{XLEN}/rv{XLEN}i_m/{ext}/src/*.S"))]
+
+
+alltests=(test_folder(32,"I")+
+          test_folder(64,"I")+
+          test_folder(32,"C")+
+          test_folder(64,"C")+
+          test_folder(32,"privilege")+
+          test_folder(32,"Zifencei")+
+          test_folder(64,"privilege")+
+          test_folder(64,"Zifencei")
           )
 
 
@@ -170,9 +171,7 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     :param max_cycles:
     :return:
     """
-    elffn=f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}-01.S/ref/ref.elf"
-    if not isfile(elffn):
-        elffn = f"riscof_work/rv{XLEN}i_m/{extname}/src/{testname}.S/ref/ref.elf"
+    elffn=f"riscof_work{XLEN}/rv{XLEN}i_m/{extname}/src/{testname}.S/dut/ref.elf"
     if XLEN==32:
         isas=(I(),        C(), C32(), Zicsr(), Zifencei())
     elif XLEN==64:
