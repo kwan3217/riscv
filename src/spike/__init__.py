@@ -36,7 +36,7 @@ def spike_sig(elffn:str,XLEN=32)->Signature:
             print(f"mem {addr:08x}",file=ouf)
         print(f"q",file=ouf)
     # Run spike and get the signature
-    cmdline=f"spike -d --debug-cmd={spikefn} --isa=RV{XLEN}IC --pc=0x{syms['rvtest_entry_point']:08x} {elffn} 2>&1 | tee {sigfn}"
+    cmdline=f"spike -d --debug-cmd={spikefn} --isa=RV{XLEN}IMAFDC --pc=0x{syms['rvtest_entry_point']:08x} {elffn} 2>&1 | tee {sigfn}"
     result=run(cmdline,capture_output=True, shell=True)
     # Read signature. Signature is in the form of 32-bit memory reads, with implied
     # addresses from the begin_signature symbol up to but excluding end_signature.

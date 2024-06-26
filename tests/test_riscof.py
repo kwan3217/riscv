@@ -133,6 +133,8 @@ from riscv.i64 import I64
 from riscv.c import C
 from riscv.c32 import C32
 from riscv.c64 import C64
+from riscv.m import M
+from riscv.m64 import M64
 from riscv.zifencei import Zifencei
 from spike import spike_sig, check_sig
 from riscv.zicsr import Zicsr
@@ -148,6 +150,8 @@ def test_folder(XLEN:int,ext:str):
 
 alltests=(test_folder(32,"I")+
           test_folder(64,"I")+
+          test_folder(32,"M")+
+          test_folder(64,"M")+
           test_folder(32,"C")+
           test_folder(64,"C")+
           test_folder(32,"privilege")+
@@ -164,18 +168,17 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     """
     Execute the riscof test cases
 
-    See [https://github.com/riscv-ovpsim/imperas-riscv-tests]
-
-
     :param testname:
     :param max_cycles:
     :return:
     """
     elffn=f"riscof_work{XLEN}/rv{XLEN}i_m/{extname}/src/{testname}.S/dut/ref.elf"
+    # Generate signature first
+    sig=spike_sig(elffn,XLEN=XLEN)
     if XLEN==32:
-        isas=(I(),        C(), C32(), Zicsr(), Zifencei())
+        isas=(I(),        M(),        C(), C32(), Zicsr(), Zifencei())
     elif XLEN==64:
-        isas=(I(), I64(), C(), C64(), Zicsr(), Zifencei())
+        isas=(I(), I64(), M(), M64(), C(), C64(), Zicsr(), Zifencei())
     hart = Hart(isas, XLEN=XLEN, breakpoints=breakpoints)
     if sbreak is not None:
         hart.mem.sbreak=sbreak
@@ -196,7 +199,6 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
         cycles+=1
     assert cycles<max_cycles,"Hit maximum cycles"
     # Check signature
-    sig=spike_sig(elffn,XLEN=XLEN)
     pass_sig=check_sig(hart.mem, sig, XLEN=XLEN)
     if not pass_sig:
         raise AssertionError("Bad signature")

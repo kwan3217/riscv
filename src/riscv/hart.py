@@ -14,7 +14,7 @@ from riscv.priv import trap
 
 def main():
     from test_riscof import test_riscof
-    test_riscof(32,"privilege","misalign-lh",breakpoints={0x8000_0406},sbreak={0x8000_301c})
+    test_riscof(64,"M","remw-01",breakpoints={0x8000_01b0},sbreak={0x8000_601c})
 
 
 if __name__ == "__main__":
