@@ -116,7 +116,7 @@ class C(InstructionSet):
             val = signed(val, self.size * 8 - 1)
             hart.x[p['rd']] = val
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.name:9s}x{p['rd']:2},{p['imm']:15}"
+            return f"{self.name:9s}x{p['rd']:2},{p['imm']:14}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=i32(mem[{self.abi_regnames[2][self.nameidx]}{'+'+str(p['imm']) if p['imm']>0 else ''}])"
     class C_MV(InstructionHandler):
@@ -148,7 +148,7 @@ class C(InstructionSet):
             if p['rd']==0:
                 raise ValueError("C.HINT")
             else:
-                return f"C.LI   x{p['rd']:2},{p['imm']:12}"
+                return f"C.LI   x{p['rd']:2},    {p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             if p['rd']==0:
                 return f"Hint (No operation)"

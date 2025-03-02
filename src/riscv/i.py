@@ -21,16 +21,16 @@ class I(InstructionSet):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             hart.x[p["rd"]] = p["imm"]
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.name:7s}r{p['rd']:2},     {p['imm']:12}"
+            return f"{self.name:7s}r{p['rd']:2},     {p['imm']:11}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             return f"{self.abi_regnames[p['rd']][self.nameidx]}=0x{p['imm']:08x}"
     class AUIPC(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             hart.x[p["rd"]] = hart.pc + p["imm"]
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"AUIPC  r{p['rd']:2},     {p['imm']:12}"
+            return f"AUIPC  r{p['rd']:2},     {p['imm']:11}"
         def formula(self, p: Mapping[str,int], XLEN: int):
-            return f"r{p['rd']}=pc{'+' if p['imm'] >= 0 else ''}0x{p['imm']:08x}"
+            return f"r{self.abi_regnames[p['rd']][self.nameidx]}=pc{'+' if p['imm'] >= 0 else ''}0x{p['imm']:08x}"
     class JAL(InstructionHandler):
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             retaddr=hart.pc+4
@@ -40,7 +40,7 @@ class I(InstructionSet):
             hart.x[p['rd']] = retaddr
             hart.pc = target
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"JAL    r{p['rd']:2},     {p['imm']:12}"
+            return f"JAL    r{p['rd']:2},    {p['imm']:12}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             if p['rd'] == 0:
                 return f"pc=pc{'+' if p['imm'] >= 0 else ''}{p['imm']}"
@@ -75,9 +75,9 @@ class I(InstructionSet):
                 self.cast=f"u{self.size*8}"
         def execute(self, p: Mapping[str,int], hart: Hart) -> None:
             addr = hart.x[p['rs1']]  # base
-            addr += signed(p['imm'], 12)
+            addr += p['imm']
             try:
-                val = hart.mem.load(self.size, addr,verbose=True,allow_misaligned=hart.allow_misaligned)
+                val = hart.mem.load(self.size, addr,allow_misaligned=hart.allow_misaligned)
             except Misaligned:
                 # Defer throwing the RVException to here, where the hart with its pc is available
                 raise RVException(message=f"Misaligned load: Addr=0x{addr:08x}, width={self.size}",
@@ -246,14 +246,14 @@ class I(InstructionSet):
         " CA98765 zzzzz lllll |_| 4321B ||___||":Branch('BGE','signed(%s)>=signed(%s)', lambda hart, rs1, rs2: hart.signed(rs1) >= hart.signed(rs2)),
         " CA98765 zzzzz lllll ||_ 4321B ||___||":Branch('BLTU','<',lambda hart, rs1, rs2: rs1 < rs2),
         " CA98765 zzzzz lllll ||| 4321B ||___||":Branch('BGEU','>=',lambda hart, rs1, rs2: rs1 >= rs2),
-        " BA9876543210  lllll ___ ddddd _____||":Load('LB',size=1,signed=True),
-        " BA9876543210  lllll __| ddddd _____||":Load('LH',size=2,signed=True),
-        " BA9876543210  lllll _|_ ddddd _____||":Load('LW',size=4,signed=True),
-        " BA9876543210  lllll |__ ddddd _____||":Load('LBU',size=1,signed=False),
-        " BA9876543210  lllll |_| ddddd _____||":Load('LHU',size=2,signed=False),
-        " BA98765 zzzzz lllll ___ 43210 _|___||":Store('SB',size=1),
-        " BA98765 zzzzz lllll __| 43210 _|___||":Store('SH',size=2),
-        " BA98765 zzzzz lllll _|_ 43210 _|___||":Store('SW',size=4),
+        "-BA9876543210  lllll ___ ddddd _____||":Load('LB',size=1,signed=True),
+        "-BA9876543210  lllll __| ddddd _____||":Load('LH',size=2,signed=True),
+        "-BA9876543210  lllll _|_ ddddd _____||":Load('LW',size=4,signed=True),
+        "-BA9876543210  lllll |__ ddddd _____||":Load('LBU',size=1,signed=False),
+        "-BA9876543210  lllll |_| ddddd _____||":Load('LHU',size=2,signed=False),
+        "-BA98765 zzzzz lllll ___ 43210 _|___||":Store('SB',size=1),
+        "-BA98765 zzzzz lllll __| 43210 _|___||":Store('SH',size=2),
+        "-BA98765 zzzzz lllll _|_ 43210 _|___||":Store('SW',size=4),
         "-BA9876543210  lllll ___ ddddd __|__||":RegImmed("ADDI", "+", lambda hart, rs1, imm: rs1 + imm),
         "-BA9876543210  lllll _|_ ddddd __|__||":RegImmed("SLTI", "(signed(%s)<signed(%s))?1:0",lambda hart, rs1, rs2: 1 if hart.signed(rs1) < hart.signed(rs2) else 0),
         "xBA9876543210  lllll _|| ddddd __|__||":RegImmed("SLTIU","(%s<%s)?1:0", lambda hart, rs1, rs2: 1 if rs1 < rs2 else 0),

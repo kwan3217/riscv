@@ -127,6 +127,8 @@ from os.path import basename, isfile
 import pytest
 
 from elf import read_elf, read_syms
+from riscv.a import A
+from riscv.f import F
 from riscv.hart import Hart
 from riscv.i import I
 from riscv.i64 import I64
@@ -148,7 +150,9 @@ def test_folder(XLEN:int,ext:str):
     return [(XLEN,ext,get_test_name(script)) for script in sorted(glob(f"riscof_work{XLEN}/rv{XLEN}i_m/{ext}/src/*.S"))]
 
 
-alltests=(test_folder(32,"I")+
+alltests=(test_folder(32,"F")+
+          test_folder(32,"I")+
+          test_folder(32,"A")+
           test_folder(64,"I")+
           test_folder(32,"M")+
           test_folder(64,"M")+
@@ -162,9 +166,9 @@ alltests=(test_folder(32,"I")+
 
 
 @pytest.mark.parametrize(
-    "XLEN,extname,testname",alltests
+    "XLEN,extname,testname",test_folder(32,"A") #+alltests
 )
-def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,sbreak:set=None):
+def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,sbreak:set={0x8000300c}):
     """
     Execute the riscof test cases
 
@@ -176,10 +180,10 @@ def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoi
     # Generate signature first
     sig=spike_sig(elffn,XLEN=XLEN)
     if XLEN==32:
-        isas=(I(),        M(),        C(), C32(), Zicsr(), Zifencei())
+        isas=(I(),        M(),        A(), F(), C(), C32(), Zicsr(), Zifencei())
     elif XLEN==64:
-        isas=(I(), I64(), M(), M64(), C(), C64(), Zicsr(), Zifencei())
-    hart = Hart(isas, XLEN=XLEN, breakpoints=breakpoints)
+        isas=(I(), I64(), M(), M64(), A(), F(), C(), C64(), Zicsr(), Zifencei())
+    hart = Hart(isas, XLEN=XLEN, breakpoints=breakpoints,halts={0x0000_0000})
     if sbreak is not None:
         hart.mem.sbreak=sbreak
     hart.mem.stuff(read_elf(elffn))

@@ -44,6 +44,8 @@ field_abbrev = {
     'rd': 'd',
     'rs1': 'l',
     'rs2': 'z',
+    'rs3': 's',
+    'rm':'r',
     "rd'": "e",
     "rs1/rd": "f",
     "rs1'/rd'": "g",

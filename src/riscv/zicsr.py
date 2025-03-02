@@ -6,126 +6,91 @@ Created: 6/11/24
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
-from riscv.hart import InstructionSet, Hart, InstructionHandler, \
-    IllegalInstruction
+from riscv.hart import InstructionSet, Hart, InstructionHandler
 from riscv.memory import Memory
 
 
-# This is literally copied, pasted, and reformatted from privisa Table 2.2
-csrnames = {
-    #i_csr priv   name       desc
-    #  User Trap Setup
-    0x000:("URW","ustatus" ,"User status register"),
-    0x004:("URW","uie"     ,"User interrupt-enable register"),
-    0x005:("URW","utvec"   ,"User trap handler base address"),
-    #  User Trap Handling
-    0x040:("URW","uscratch","Scratch register for user trap handlers"),
-    0x041:("URW","uepc"    ,"User exception program counter"),
-    0x042:("URW","ucause"  ,"User trap cause"),
-    0x043:("URW","utval"   ,"User bad address or instruction"),
-    0x044:("URW","uip"     ,"User interrupt pending"),
-    #  User Floating-Point CSRs
-    0x001:("URW","fflags"  ,"Floating-Point Accrued Exceptions"),
-    0x002:("URW","frm"     ,"Floating-Point Dynamic Rounding Mode"),
-    0x003:("URW","fcsr"    ,"Floating-Point Control and Status Register (frm + fflags)"),
-    #  User Counter/Timers
-    0xC00:("URO","cycle"   ,"Cycle counter for RDCYCLE instruction"),
-    0xC01:("URO","time"    ,"Timer for RDTIME instruction"),
-    0xC02:("URO","instret" ,"Instructions-retired counter for RDINSTRET instruction"),}|{
-    0xC00+x:("URO",f"hpmcounter{x}","Performance-monitoring counter") for x in range(3,32)}|{
-    0xC80:("URO","cycleh"  ,"Upper 32 bits of cycle, RV32I only"),
-    0xC81:("URO","timeh"   ,"Upper 32 bits of time, RV32I only"),
-    0xC82:("URO","instreth","Upper 32 bits of instret, RV32I only"),}|{
-    0xC80+x:("URO",f"hpmcounter{x}h","Upper 32 bits of hpmcounter{x}, RV32I only") for x in range(3,32)}|{
-    #  Supervisor Trap Setup
-    0x100:("SRW","sstatus","Supervisor status register"),
-    0x102:("SRW","sedeleg","Supervisor exception delegation register"),
-    0x103:("SRW","sideleg","Supervisor interrupt delegation register"),
-    0x104:("SRW","sie","Supervisor interrupt-enable register"),
-    0x105:("SRW","stvec","Supervisor trap handler base address"),
-    0x106:("SRW","scounteren","Supervisor counter enable"),
-    #  Supervisor Trap Handling
-    0x140:("SRW","sscratch","Scratch register for supervisor trap handlers"),
-    0x141:("SRW","sepc","Supervisor exception program counter"),
-    0x142:("SRW","scause","Supervisor trap cause"),
-    0x143:("SRW","stval","Supervisor bad address or instruction"),
-    0x144:("SRW","sip","Supervisor interrupt pending"),
-    #  Supervisor Protection and Translation
-    0x180:("SRW","satp","Supervisor address translation and protection"),
-    #  Machine Information Registers
-    0xF11:("MRO","mvendorid","Vendor ID"),
-    0xF12:("MRO","marchid","Architecture ID"),
-    0xF13:("MRO","mimpid","Implementation ID"),
-    0xF14:("MRO","mhartid","Hardware thread ID"),
-    #  Machine Trap Setup
-    0x300:("MRW","mstatus","Machine status register"),
-    0x301:("MRW","misa","ISA and extensions"),
-    0x302:("MRW","medeleg","Machine exception delegation register"),
-    0x303:("MRW","mideleg","Machine interrupt delegation register"),
-    0x304:("MRW","mie","Machine interrupt-enable register"),
-    0x305:("MRW","mtvec","Machine trap-handler base address"),
-    0x306:("MRW","mcounteren","Machine counter enable"),
-    #  Machine Trap Handling
-    0x340:("MRW","mscratch","Scratch register for machine trap handlers"),
-    0x341:("MRW","mepc","Machine exception program counter"),
-    0x342:("MRW","mcause","Machine trap cause"),
-    0x343:("MRW","mtval","Machine bad address or instruction"),
-    0x344:("MRW","mip","Machine interrupt pending"),
-    #  Machine Memory Protection
-    0x3A0:("MRW","pmpcfg0","Physical memory protection configuration"),
-    0x3A1:("MRW","pmpcfg1","Physical memory protection configuration, RV32 only"),
-    0x3A2:("MRW","pmpcfg2","Physical memory protection configuration"),
-    0x3A3:("MRW","pmpcfg3","Physical memory protection configuration, RV32 only"),}|{
-    0x3B0+x:("MRW",f"pmpaddr{x}","Physical memory protection address register") for x in range(0,16)}|{
-    #  Machine Counter/Timers
-    0xB00:("MRW","mcycle"  ,"Machine cycle counter"),
-    0xB02:("MRW","minstret","Machine instructions-retired counter")}|{
-    0xB00+x:("MRW",f"mhpmcounter{x}","Machine performance-monitoring counter") for x in range(3,32)}|{
-    0xB80:("MRW","mcycleh","Upper 32 bits of mcycle, RV32I only"),
-    0xB82:("MRW","minstreth","Upper 32 bits of minstret, RV32I only"),}|{
-    0xB80+x:("MRW", f"mhpmcounter{x}h", f"Upper 32 bits of mhpmcounter{x}, RV32I only") for x in range(3, 32)}|{
-    #  Machine Counter Setup
-    0x320:("MRW","mcountinhibit","Machine counter-inhibit register"),}|{
-    0x320+x:("MRW", f"mhpmevent{x}", "Machine performance-monitoring event selector") for x in range(3, 32)}|{
-    #  Debug/Trace Registers (shared with Debug Mode)
-    0x7A0:("MRW","tselect","Debug/Trace trigger register select"),
-    0x7A1:("MRW","tdata1","First Debug/Trace trigger data register"),
-    0x7A2:("MRW","tdata2","Second Debug/Trace trigger data register"),
-    0x7A3:("MRW","tdata3","Third Debug/Trace trigger data register"),
-    #  Debug Mode Registers
-    0x7B0:("DRW","dcsr","Debug control and status register"),
-    0x7B1:("DRW","dpc","Debug PC"),
-    0x7B2:("DRW","dscratch0","Debug scratch register 0"),
-    0x7B3:("DRW","dscratch1","Debug scratch register 1"),}
-
-
-csrname_index={name:i for i,(access,name,comment) in csrnames.items()}
+class NoSuchCSR(Exception):
+    pass
 
 
 class CSR(Memory):
+    # This is solely the registers not attached to any particular privilege mode. As it turns out, there aren't any.
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.csrname_index={}
+        self.csrnames={}
+    def add_reg(self,i:int,access:str,name:str,comment:str,
+                rside:Callable[[Hart,int],int]=None,
+                wside:Callable[[Hart,int],int]=None,
+                cside:Callable[[Hart],int]=None):
+        """
+        Add a CSR
+        :param i: Address of register
+        :param access: Access mode string:
+          First character - minimum privilege needed to read the register
+                 'U'=user mode or better, 'S'=supervisor mode or better, 'M'=machine mode
+          Second two control access direction
+                 'RW' Read-write
+                 'RO' Read-only
+        :param name: Official name of register in all lower-case
+        :param comment: Official comment on register
+        :param rside: Read side effect. Callable that takes a hart and the value which is stored
+                      in the array. Return value is the actual value to be recieved by the hart.
+                      None is the same as lambda hart,val:val. Callable is allowed to modify hart
+                      state, including access any register, memory address, CSR, etc. Callable is
+                      allowed to create host output.
+        :param wside: Write side effect. Callable that takes a hart and the value which the hart
+                      gave to be written to the register. Return value is the value which will
+                      actually be stored in the array. Similarly callable is allowed to have
+                      arbitrary effect on the hart state.
+        :param cside: Cycle side effect. Callable that takes a hart and value currently stored in
+                      the array for this register. Return value is value to be written back to the
+                      CSR storage. Callable is allowed to have arbitrary effect on the hart state.
+        """
+        self.csrname_index[name]=i
+        self.csrnames[i]=(access,name,comment,rside,wside,cside)
+    def add_regs(self,regs:dict[int,tuple[str,str,str]]):
+        """
+        Add multiple registers to the CSRs
+        :param regs: Dictionary. Key is 12-bit CSR address, value is tuple of access mode, name, and comment
+        """
+        for i,(access,name,comment,*rest) in regs.items():
+            if len(rest)>0:
+                rside,wside,cside=rest
+            else:
+                rside,wside,cside=None,None,None
+            self.add_reg(i,access,name,comment,rside,wside,cside)
     def __getitem__(self,key):
         if type(key)==str:
             try:
-                key=csrname_index[key]
+                key=self.csrname_index[key]
             except IndexError:
                 raise IndexError(f"CSR name {key} not found")
-        if key not in csrnames:
-            raise IllegalInstruction(f"Tried to read CSR[0x{key:03x}] which doesn't exist")
+        if key not in self.csrnames:
+            raise NoSuchCSR(f"Tried to read CSR[0x{key:03x}] which doesn't exist")
         if key not in self:
             super().__setitem__(key,0)
         value=super().__getitem__(key)
-        print(f"  CSR[0x{key:03x}{' ('+csrnames[key][1]+')' if key in csrnames else ''}]->value=0x{value:08x}  {' # '+csrnames[key][2] if key in csrnames else ''}")
+        if self.verbose:
+            print(f"  CSR[0x{key:03x}{' ('+self.csrnames[key][1]+')' if key in self.csrnames else ''}]->value=0x{value:08x} {' # '+self.csrnames[key][2] if key in self.csrnames else ''}")
         return value
     def __setitem__(self,key,value):
         if type(key)==str:
             try:
-                key=csrname_index[key]
+                key=self.csrname_index[key]
             except IndexError:
                 raise IndexError(f"CSR name {key} not found")
-        if key not in csrnames:
-            raise IllegalInstruction(f"Tried to write to CSR[0x{key:03x}] which doesn't exist")
-        print(f"  CSR[0x{key:03x}{' ('+csrnames[key][1]+')' if key in csrnames else ''}]<-value=0x{value:08x} {' # '+csrnames[key][2] if key in csrnames else ''}")
-        value=super().__setitem__(key,value)
+        if key not in self.csrnames:
+            raise NoSuchCSR(f"Tried to write to CSR[0x{key:03x}] which doesn't exist")
+        if self.verbose:
+            print(f"  CSR[0x{key:03x}{' ('+self.csrnames[key][1]+')' if key in self.csrnames else ''}]<-value=0x{value:08x} {' # '+self.csrnames[key][2] if key in self.csrnames else ''}")
+        super().__setitem__(key,value)
+    def cycle_side_effect(self,hart:Hart):
+        for addr,(access,name,comment,rside,wside,cside) in self.csrnames.items():
+            if cside is not None:
+                self[addr]=cside(hart,self[addr])
 
 
 class Zicsr(InstructionSet):
@@ -140,35 +105,11 @@ class Zicsr(InstructionSet):
           ignored and do not cause an exception. Simultaneous writes to writable bits are successful.
     This emulator will enforce these restrictions.
     """
+    def __init__(self,verbose:bool=False):
+        self.verbose=verbose
     def add_state(self,hart:Hart):
-        hart.csr=CSR()
-        if hart.XLEN==32:
-            xlen_enc=1
-        elif hart.XLEN==64:
-            xlen_enc=2
-        elif hart.XLEN==128:
-            xlen_enc=3
-        hart.csr['misa'] = xlen_enc << 30
+        hart.csr=CSR(verbose=self.verbose)
 
-    class xRET(InstructionHandler):
-        """
-        Return to a different privilege level. For now we just
-        copy the correct CSR (determined by which privilege level
-        we are going to) to the pc
-        """
-
-        def __init__(self, name: str, csr:int):
-            self.name = name
-            self.csr = csr
-        def execute(self, p: Mapping[str,int], hart: Hart) -> None:
-            hart.pc=hart.csr[self.csr]
-        def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.name:7s}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
-            name=f"0x{self.csr:03x}"
-            if self.csr in csrnames:
-                name+=f" ({csrnames[self.csr][1]})"
-            return f"pc=CSR[{name}]"
     class CSRR(InstructionHandler):
         """
         CSR Read and Set -- perform the following two operations
@@ -184,6 +125,12 @@ class Zicsr(InstructionSet):
           not trigger an exception.
         """
         def __init__(self,name:str,symbol:str,op:Callable[[int,int],int]):
+            """
+
+            :param name: Name of instruction
+            :param symbol: Symbol for operation
+            :param op: Callable which calculates the value to be stored in the CSR
+            """
             self.name=name
             self.symbol=symbol
             self.op=op
@@ -202,12 +149,12 @@ class Zicsr(InstructionSet):
             # side effects.
             if p['rs1']!=0:
                 hart.csr[p['imm']]=self.op(old_csr,old_reg)
-        def disasm(self, p: Mapping[str,int], XLEN: int):
+        def disasm(self, p: Mapping[str,int], hart:Hart):
             return f"{self.name:7s}x{p['rd']:2},x{p['rs1']:2},{p['imm']:12}"
-        def formula(self, p: Mapping[str,int], XLEN: int):
+        def formula(self, p: Mapping[str,int], hart:Hart):
             name=f"0x{p['imm']:03x}"
-            if p['imm'] in csrnames:
-                name+=f" ({csrnames[p['imm']][1]})"
+            if p['imm'] in hart.csr.csrnames:
+                name+=f" ({hart.csr.csrnames[p['imm']][1]})"
             if p['rd']==0:
                 return f"CSR[{name}]{self.symbol}{self.abi_regnames[p['rs1']][self.nameidx]}"
             elif "CSRRS"==self.name and p['rs1']==0:
@@ -240,12 +187,12 @@ class Zicsr(InstructionSet):
             old_reg=hart.x[p['rs1']]
             hart.x[p['rd']]=old_csr
             hart.csr[p['imm']]=old_reg
-        def disasm(self, p:Mapping[str,int], XLEN: int):
+        def disasm(self, p:Mapping[str,int], hart:Hart):
             return f"CSRRW  x{p['rd']:2},x{p['rs1']:2},{p['imm']:12}"
-        def formula(self, p:Mapping[str,int], XLEN: int):
+        def formula(self, p:Mapping[str,int], hart:Hart):
             name=f"0x{p['imm']:03x}"
-            if p['imm'] in csrnames:
-                name+=f" ({csrnames[p['imm']][1]})"
+            if p['imm'] in hart.csr.csrnames:
+                name+=f" ({hart.csr.csrnames[p['imm']][1]})"
             if p['rd']==0:
                 return f"CSR[{name}]={self.abi_regnames[p['rs1']][self.nameidx]}"
             else:
@@ -278,7 +225,7 @@ class Zicsr(InstructionSet):
             hart.csr[p['imm']]=self.op(old_csr,old_reg)
             hart.x[p['rd']]=old_csr
         def disasm(self, p: Mapping[str,int], XLEN: int):
-            return f"{self.name:7s}x{p['rd']:2},{p['rs1']:2},{p['imm']:12}"
+            return f"{self.name:7s}x{p['rd']:2},{p['rs1']:2},{p['imm']:13}"
         def formula(self, p: Mapping[str,int], XLEN: int):
             name=f"0x{p['imm']:03x}"
             if p['imm'] in csrnames:
@@ -294,7 +241,6 @@ class Zicsr(InstructionSet):
         '+BA9876543210 lllll |_| ddddd |||__||':CSRI("CSRRWI", "=" ,lambda csr,rs1:rs1),     # For CSRI, we have to encode *two* immediates,
         '+BA9876543210 lllll ||_ ddddd |||__||':CSRI("CSRRSI","|=" ,lambda csr,rs1:csr|rs1), #     one for the CSR index and one for the value to use.
         '+BA9876543210 lllll ||| ddddd |||__||':CSRI("CSRRCI","&=~",lambda csr,rs1:csr&~rs1),#     We use the rs1 slot for the value.
-        ' __||___ ___|_ _____ ___ _____ |||__||':xRET("MRET",0x341)
     }
     def get_decode_table(self):
         return self.ins_exec

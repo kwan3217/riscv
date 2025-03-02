@@ -6,6 +6,7 @@ Created: 6/12/24
 from enum import Enum
 from typing import Iterable, Mapping
 
+from elf import symbolic_addr
 from riscv.bits import bitmask, read_bitfield, sign_extend, signed
 from riscv.decode import compile_encodings, decode
 from riscv.memory import Memory, Misaligned
@@ -14,7 +15,7 @@ from riscv.priv import trap
 
 def main():
     from test_riscof import test_riscof
-    test_riscof(64,"M","remw-01",breakpoints={0x8000_01b0},sbreak={0x8000_601c})
+    test_riscof(32,"F","fadd_b1-01",breakpoints={0x8000_0160},sbreak={0x8000_601c})
 
 
 if __name__ == "__main__":
@@ -159,7 +160,7 @@ class IllegalInstruction(RVException):
     not handle the exception and let Python handle the failure.
     """
     def __init__(self,message:str=None,*,epc:int):
-        super().__init__(message=message,is_interrupt=False,cause=ExcCause.ILLEGAL_INSTRUCTION.value,epc=epc)
+        super().__init__(message=message,is_interrupt=False,cause=ExcCause.ILLEGAL_INSTRUCTION,epc=epc)
 
 
 class InstructionHandler:
@@ -183,7 +184,7 @@ class InstructionHandler:
                  it should go on to the next one etc.
         """
         raise NotImplementedError()
-    def disasm(self, p: Mapping[str,int], XLEN: int)->str:
+    def disasm(self, p: Mapping[str,int], hart:'Hart')->str:
         """
         Disassemble an instruction into one assembly-language statement
 
@@ -193,7 +194,7 @@ class InstructionHandler:
                  with the GCC assembler.
         """
         raise NotImplementedError()
-    def formula(self, p: Mapping[str,int], XLEN: int):
+    def formula(self, p: Mapping[str,int], hart:'Hart'):
         """
         Disassemble an instruction into a line of C-like code. This is
         easier for a human to interpret since we don't have to remember
@@ -248,9 +249,11 @@ class Hart:
     """
     Represent a (Har)dware (t)hread.
     """
-    def __init__(self,exts:Iterable['InstructionSet'],mem=None,XLEN=32,breakpoints:set=None,halts:set=None):
+    def __init__(self,exts:Iterable['InstructionSet'],mem=None,XLEN=32,breakpoints:set=None,halts:set=None,dverbose:bool=False,rverbose:bool=False):
         self.exts=exts
         self.allow_misaligned=False
+        self.dverbose=dverbose
+        self.rverbose=rverbose
         if mem is None:
             mem=Memory()
         if breakpoints is None:
@@ -280,6 +283,8 @@ class Hart:
         return sign_extend(v, bit, self.XLEN)
     def signed(self,v):
         return signed(v, self.XLEN - 1)
+    def unsigned(self,v):
+        return read_bitfield(v, self.XLEN - 1,0)
     def set_pc(self,v):
         self._pc= read_bitfield(v, self.XLEN - 1, 0)
         self._pc_changed=True
@@ -303,7 +308,7 @@ class Hart:
         try:
             parcel=self.mem.load(2,self.pc,allow_misaligned=False)
         except Misaligned:
-            raise RVException(message=f"Misaligned load: Addr=0x{self.pc:08x}, width=2",
+            raise RVException(message=f"Misaligned fetch: Addr=0x{self.pc:08x}, width=2",
                               is_interrupt=False,
                               cause=ExcCause.INSTRUCTION_ADDRESS_MISALIGNED,
                               epc=self.pc,
@@ -319,32 +324,43 @@ class Hart:
             # There is a proposal for instructions longer than 32-bits,
             # but it is not considered frozen and no instructions use it.
             raise IllegalInstruction("Instruction is longer than 32-bits, spec is not frozen")
-    def exec_one(self):
+    def exec_one(self,inv_syms:dict[int,str]=None):
+        if inv_syms is None:
+            inv_syms={}
         self._pc_changed=False
+        if self.rverbose:
+            self.dump()
         if self.pc in self.breakpoints:
-            print(f"Breakpoint at pc=0x{self.pc:08x}")
+            print(f"Breakpoint at pc=0x{self.pc:08x} {symbolic_addr(self.pc,inv_syms)}")
+            self.dverbose=True
+            self.dump()
+            self.step=True
         if self.pc in self.halts:
-            raise StopIteration(f"Hit halt at pc=0x{self.pc:08x}")
-        length,ins=self.fetch()
-        fields,handler=decode(ins, self.decode_table,XLEN=self.XLEN)
-        if handler is not None:
-            if type(handler) is str:
-                raise ValueError(f"Unimplemented instruction {handler}")
-            print(f"{self.pc:08x} -- {ins:0{length*2}x}      {handler.disasm(fields, self.XLEN)}  # {handler.formula(fields, self.XLEN)}")
-            try:
+            raise StopIteration(f"Hit halt at pc=0x{self.pc:08x} {symbolic_addr(self.pc,inv_syms)}")
+        try: # Handle any RVException or subclass by calling the trap routine
+            length, ins = self.fetch()
+            try: # Convert WrongInterpreter to IllegalInstruction
+                fields, handler = decode(ins, self.decode_table, XLEN=self.XLEN)
+            except WrongInterpreter:
+                if read_bitfield(ins, 1, 0) == 0b11:
+                    raise IllegalInstruction(f"Unhandled instruction 0x{ins:08x}", epc=self.pc)
+                else:
+                    raise IllegalInstruction(f"Unhandled compressed instruction "
+                                             f"0b{read_bitfield(ins, 15, 13):03b}_{read_bitfield(ins, 12, 12):01b}_{read_bitfield(ins, 11, 7):05b}_{read_bitfield(ins, 6, 2):05b}_{read_bitfield(ins, 1, 0):02b}",
+                                             epc=self.pc)
+            if handler is not None:
+                if type(handler) is str:
+                    raise IllegalInstruction(f"Decoded but unimplemented instruction 0x{ins:0{length*2}x} ({handler} with fields {fields})",epc=self.pc)
+                #print(symbol_for_address(self.pc))
+                if self.dverbose:
+                    print(f"{self.pc:08x}{symbolic_addr(self.pc,inv_syms)} -- {ins:0{length * 2}x}{'  '*(4-length)}      {handler.disasm(fields, self)}  # {handler.formula(fields, self)}")
                 handler.execute(fields,self)
-            except RVException as e:
-                trap(self,e)
-            if not self._pc_changed:
-                self.pc += length
-        else:
-            if read_bitfield(ins, 1, 0)==0b11:
-                from riscv.i import I
-                raise IllegalInstruction(f"Unhandled instruction {I(ins, self.XLEN, True)}")
-            else:
-                raise IllegalInstruction(f"Unhandled compressed instruction "
-                                         f"0b{read_bitfield(ins, 15, 13):03b}_{read_bitfield(ins, 12, 12):01b}_{read_bitfield(ins, 11, 7):05b}_{read_bitfield(ins, 6, 2):05b}_{read_bitfield(ins, 1, 0):02b}",
-                                         epc=self.pc)
+        except RVException as e:
+            trap(self,e)
+        self.csr.cycle_side_effect(self)
+        if not self._pc_changed:
+            self.pc += length
+
 
 
 class StateUpdate:
@@ -368,18 +384,21 @@ class Regfile:
     def __init__(self,XLEN=32):
         self._x=[0]*32
         self.XLEN=XLEN
-    def __getitem__(self,r):
+    def __getitem__(self,r,verbose=False):
         if r==0:
             v=0
         else:
             v=self._x[r]
-            print(f"   x{r:2}({InstructionHandler.abi_regnames[r][0]:4s})->0x{v:0{self.XLEN//4}x}  # {InstructionHandler.abi_regnames[r][1]}")
+            if verbose:
+                print(f"   x{r:2}({InstructionHandler.abi_regnames[r][0]:4s})->0x{v:0{self.XLEN//4}x}  # {InstructionHandler.abi_regnames[r][1]}")
         return v
-    def __setitem__(self,r,v):
+    def __setitem__(self,r,v,verbose:bool=False):
         if r==0:
             return
         v=v & bitmask(self.XLEN - 1, 0)
-        print(f"   x{r:2}({InstructionHandler.abi_regnames[r][0]:4s})<-0x{v:0{self.XLEN//4}x} # {InstructionHandler.abi_regnames[r][1]}")
+        if verbose:
+            print(f"   x{r:2}({InstructionHandler.abi_regnames[r][0]:4s})<-0x{v:0{self.XLEN//4}x} # {InstructionHandler.abi_regnames[r][1]}")
+
         #todo - Be careful about signed/unsigned, twos complement, sign extension, etc.
         self._x[r]=v
 
