@@ -115,7 +115,51 @@ def get_encoding_sign(human_encoding: str):
     return human_encoding, sign_ext, signed
 
 
-def compile_encoding(human_encoding:str)->tuple[compiled_encoding_bitmask,bitfields_desc,bool,bool]:
+def compile_encoding(human_encoding:str)->compiled_encoding:
+    """
+    Compile a single encoding
+
+    :param human_encoding: String with each character representing at most one bit:
+      * - Doesn't represent a bit, but indicates that the encoded immediate should be sign-extended and treated as signed
+      * + Doesn't represent a bit, but indicates that the encoded immediate should be zero-extended and treated as unsigned
+      * x Doesn't represent a bit, but indicates that the encoded immediate should be sign-extended
+          but still treated as unsigned. This happens for instance in logical ALU instructions like ANDI, XORI, etc.
+      * | Represents a bit which must be a 1 in the encoded instruction word. If there isn't a 1 here, it isn't this instruction.
+      * _ Represents a bit which must be a 0 in the encoded instruction word. If there isn't a 0 here, it isn't this instruction.
+      * 0-9,A-Z (upper case) Represents bits 2**0 through 2**9, then 2**10 through 2**35 of the immediate value in
+          an instruction. Allows the immediate to be in any scrambled order which makes sense to hardware
+          but might not to software.
+      * l,z,d represent a bit of rs1, rs2, and rd respectively. These bits are never scrambled so we just need
+          a string of 'ddddd' to occupy the consecutive bits which address rd. The case of non-consecutive register
+          bits isn't handled and never comes up in practice.
+      * s represents a bit of rs3, same as above. rs3 is used in some instructions like floating-point fma.
+      * r,e,f,g,m,y represent bits with register addresses in compressed instructions. These are encoded in a
+          straightforward way, but not necessarily unsigned binary like in uncompressed instructions. The most
+          common encoding is something like rd(5 bits)=rd'(3 bits)+8. This only allows access to x8-x15 but
+          that's the price we pay for compressing. If we need a register not in this space, we just use a normal
+          I instruction.
+          r - rm
+          e - rd'=rd+8, 3 bits
+          f - rs1/rd, read from rs1 and write back to same register as rd
+          g - rs1'/rd', read from rs1=rs1'+8 and write back to same register as rd
+          m - rs1'=rs1+8, 3 bits
+          y - rs2'=rs2+8, 3 bits
+    :return: A compiled encoding, a named tuple with the following fields:
+      * mask - An instance of a compiled encoding bitmask. Its method match() can be used to determine
+        if an instruction word matches this encoding.
+      * fields - a dictionary where key is name of field from the list ["rs1","rs2","rd","rs3","imm"]
+        and value is an iterable of subfields, each one being a tuple indicating the highest bit of the
+        instruction word, the lowest bit of the instruction word, and the lowest bit of the field value.
+        For instance, rd always gets the fields ((11,7,0),) which indicates that the bits from 11 to 7 in
+        the instruction word should be part of rd with bit 7 in the instruction occupying bit 0 in the bitfield.
+        Immediates might have much more complicated fields with many subfields (in fact the current
+        implementation has one subfield for each bit).
+      * sign_ext - Indicates if the the imm value should be sign-extended or not
+      * signed - Indicates if the imm value should be considered signed (negative numbers in domain) or not.
+        In most cases sign_ext and signed have the same value, but in logical operations (AND, XOR, etc)
+        the immediate is still treated as bits (and therefore most appropriately as unsigned) even as the
+        sign bit is copied to fill out the full XLEN width.
+    """
     human_encoding,sign_ext,signed=get_encoding_sign(human_encoding)
     encoding=reverse_encoding(human_encoding)
     clearb=get_mask(encoding,'_')
@@ -146,7 +190,7 @@ def compile_encoding(human_encoding:str)->tuple[compiled_encoding_bitmask,bitfie
     return compiled_encoding(mask=compiled_encoding_bitmask(clearb,setb),fields=fields,signed=signed,sign_ext=sign_ext)
 
 
-def compile_encodings(human_encodings):
+def compile_encodings(human_encodings)->dict:
     result={}
     for human_encoding, handler in human_encodings.items():
         clearset, fields, sign_ext, signed = compile_encoding(human_encoding)
