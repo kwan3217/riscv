@@ -4,7 +4,7 @@ Describe purpose of this script here
 Created: 6/12/24
 """
 from enum import Enum
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Callable
 
 from elf import symbolic_addr
 from riscv.bits import bitmask, read_bitfield, sign_extend, signed
@@ -375,8 +375,8 @@ class StateUpdate:
 class InstructionSet:
     def add_state(self,hart:Hart):
         pass
-    def interpret(self,hart:Hart,ins:int)->bool:
-        return False
+    def get_decode_table(self)->dict[str,Callable]:
+        return {}
 
 
 class Regfile:
