@@ -166,7 +166,9 @@ alltests=(test_folder(32,"F")+
 
 
 @pytest.mark.parametrize(
-    "XLEN,extname,testname",test_folder(32,"A") #+alltests
+    "XLEN,extname,testname",
+    #test_folder(32,"A") +
+    alltests
 )
 def test_riscof(XLEN:int,extname:str,testname:str,max_cycles:int=100000,breakpoints:set=None,sbreak:set={0x8000300c}):
     """
