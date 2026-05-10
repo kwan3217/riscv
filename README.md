@@ -1,3 +1,5 @@
+Active development shifted to [GitLab](https://gitlab.com/kwan32171/riscv)
+
 # riscv
 This is an emulator for the RISC-V
 instruction set architecture. This
